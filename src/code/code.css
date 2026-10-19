@@ -1,0 +1,19 @@
+:root { color-scheme: dark; }
+html, body { margin: 0; background: #1f2937; color: #e5e7eb; font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+main { max-width: 640px; margin: 0 auto; padding: 24px 20px 32px; }
+header { display: flex; align-items: center; gap: 10px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #6b7280; margin: 24px 0 8px; font-weight: 600; }
+.badge { font-size: 11px; color: #c4b5fd; border: 1px solid #5b21b6; border-radius: 999px; padding: 1px 8px; }
+.notice { margin-top: 16px; padding: 12px 14px; border: 1px dashed #4b5563; border-radius: 8px; background: rgba(17, 24, 39, .5); }
+.notice p { margin: 4px 0 0; color: #d1d5db; }
+dl { margin: 0; border: 1px solid #374151; border-radius: 8px; }
+dl > div { display: flex; gap: 16px; padding: 10px 14px; }
+dl > div + div { border-top: 1px solid #374151; }
+dt { width: 110px; flex: none; color: #9ca3af; }
+dd { margin: 0; color: #f3f4f6; }
+dd small { display: block; color: #6b7280; font-size: 12px; }
+.composer { display: flex; gap: 8px; margin-top: 24px; opacity: .55; }
+.composer input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid #374151; background: #111827; color: #9ca3af; cursor: not-allowed; }
+.composer button { padding: 8px 14px; border-radius: 8px; border: 0; background: #374151; color: #9ca3af; cursor: not-allowed; }
+@media (max-width: 480px) { dl > div { flex-direction: column; gap: 2px; } dt { width: auto; } }

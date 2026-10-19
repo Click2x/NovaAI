@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Nova - Code</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <link rel="stylesheet" href="/src/code/code.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Code</h1>
+        <span class="badge">placeholder</span>
+      </header>
+
+      <section class="notice">
+        <strong>Not built yet</strong>
+        <p>This window is a stand-in for the coding agent. The agent loop, tools and settings are still being designed, so nothing here does anything yet.</p>
+      </section>
+
+      <h2>Planned setup</h2>
+      <dl>
+        <div><dt>Agent model</dt><dd>Qwen3.6 27B (abliterated, Q4_K_M)<small>loads on demand; the chat model unloads while it runs</small></dd></div>
+        <div><dt>Chat model</dt><dd>Mistral NeMo 12B<small>resident voice, long keep-alive</small></dd></div>
+        <div><dt>Permissions</dt><dd>Set by you<small>ask each time / auto-accept edits / plan only</small></dd></div>
+        <div><dt>Workspace</dt><dd>A folder you choose<small>the agent stays inside it</small></dd></div>
+      </dl>
+
+      <div class="composer">
+        <input disabled placeholder="Describe a coding task (coming soon)" />
+        <button disabled>Run</button>
+      </div>
+    </main>
+  </body>
+</html>

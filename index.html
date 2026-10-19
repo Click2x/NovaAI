@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Nova</title>
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' nova-asset: blob: data: ws://localhost:5174; img-src 'self' data: blob: nova-asset:" />
+    <style>
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      body.debug { outline: 2px dashed rgba(255, 80, 80, 0.6); outline-offset: -2px; }
+      #status { position: fixed; left: 8px; top: 8px; font: 11px monospace; color: #fff;
+        background: rgba(0,0,0,.55); padding: 2px 6px; border-radius: 4px; display: none; }
+      body.debug #status { display: block; }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <div id="status"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
