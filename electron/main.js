@@ -4,7 +4,7 @@
 // and forwarded mouse-moves are unreliable on Windows. So the main process polls the global cursor,
 // sends it (window-relative) to the renderer, and the renderer reads the alpha of the pixel under
 // the cursor and answers with set-interactive. The window ignores the mouse except over the avatar.
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, protocol, net, nativeImage } = require('electron')
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, protocol, net, nativeImage, powerMonitor } = require('electron')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const fs = require('fs')
@@ -172,6 +172,7 @@ app.whenReady().then(() => {
   createTray()
   startCursorPolling()
 
+  globalShortcut.register('Control+Alt+Space', openInput)
   globalShortcut.register('Control+Alt+N', toggleVisible)
   globalShortcut.register('Control+Alt+D', () => setDebug(!debug))
 })
@@ -181,6 +182,23 @@ ipcMain.on('set-interactive', (_e, on) => {
   interactive = on
   win.setIgnoreMouseEvents(!on)
 })
+
+// The overlay never takes focus on its own; typing is the one case where it must.
+function openInput() {
+  if (!win) return
+  if (!win.isVisible()) win.showInactive()
+  win.focus()
+  win.webContents.send('open-input')
+}
+ipcMain.on('input-closed', () => { if (win) win.blur() })
+
+// Seconds since the user last touched keyboard or mouse; lets the backend decide between a desktop bubble and a phone push.
+ipcMain.handle('idle-seconds', () => powerMonitor.getSystemIdleTime())
+
+ipcMain.handle('get-config', () => ({
+  backend: process.env.NOVA_BACKEND || 'ws://127.0.0.1:8000/api/desktop/ws',
+  autoSay: process.env.NOVA_SMOKE_SAY || null, // test hook: send this text once connected
+}))
 
 ipcMain.on('drag-start', () => {
   if (!win) return

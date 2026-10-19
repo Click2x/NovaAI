@@ -4,18 +4,32 @@
     <meta charset="UTF-8" />
     <title>Nova</title>
     <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' nova-asset: blob: data: ws://localhost:5174; img-src 'self' data: blob: nova-asset:" />
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' nova-asset: blob: data: ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: nova-asset:" />
     <style>
-      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
       canvas { display: block; width: 100vw; height: 100vh; }
       body.debug { outline: 2px dashed rgba(255, 80, 80, 0.6); outline-offset: -2px; }
       #status { position: fixed; left: 8px; top: 8px; font: 11px monospace; color: #fff;
         background: rgba(0,0,0,.55); padding: 2px 6px; border-radius: 4px; display: none; }
       body.debug #status { display: block; }
+
+      /* Speech bubble: display only, never takes the mouse. */
+      #bubble { position: fixed; left: 12px; right: 12px; bottom: 150px; max-height: 40%; overflow: hidden;
+        padding: 10px 14px; border-radius: 16px; color: #f5f3ff; background: rgba(30, 27, 46, .92);
+        border: 1px solid rgba(167, 139, 250, .5); box-shadow: 0 4px 18px rgba(0,0,0,.35);
+        opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
+      #bubble.show { opacity: 1; transform: none; }
+
+      #inputbox { position: fixed; left: 12px; right: 12px; bottom: 12px; display: none; }
+      #inputbox.show { display: block; }
+      #inputbox input { box-sizing: border-box; width: 100%; padding: 10px 14px; border-radius: 14px; outline: none;
+        border: 1px solid rgba(167, 139, 250, .7); background: rgba(30, 27, 46, .95); color: #f5f3ff; font: inherit; user-select: text; }
     </style>
   </head>
   <body>
     <canvas id="stage"></canvas>
+    <div id="bubble"></div>
+    <div id="inputbox"><input id="field" type="text" placeholder="Say something to Nova..." autocomplete="off" /></div>
     <div id="status"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
