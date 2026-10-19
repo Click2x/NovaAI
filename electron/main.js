@@ -4,16 +4,30 @@
 // and forwarded mouse-moves are unreliable on Windows. So the main process polls the global cursor,
 // sends it (window-relative) to the renderer, and the renderer reads the alpha of the pixel under
 // the cursor and answers with set-interactive. The window ignores the mouse except over the avatar.
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, protocol, net, nativeImage, powerMonitor } = require('electron')
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, protocol, net, nativeImage, powerMonitor, session, desktopCapturer } = require('electron')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const fs = require('fs')
+const { createPrivacy } = require('./privacy')
+const { createTracker, powershellProvider, getWindowsProvider } = require('./windowtrack')
+const { captureActiveWindow } = require('./capture')
+const settingsLib = require('./settings')
+const placement = require('./placement')
+
+// NOVA_USER_DATA=<dir> keeps a test run's settings away from the real ones.
+if (process.env.NOVA_USER_DATA) app.setPath('userData', path.resolve(process.env.NOVA_USER_DATA))
+
+// Nova speaks without the user having clicked in this window first.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 const DEV = process.env.NOVA_DEV === '1'
 const WIN_W = 420
 const WIN_H = 680
 const POLL_MS = 33
-const DEFAULT_VRM = path.resolve(__dirname, '..', '..', 'vrm_models', 'Nova_v1_grunge.vrm')
+// Packaged builds carry the model in resources/ (electron-builder extraResources); from source it is the repo's vrm_models folder.
+const DEFAULT_VRM = app.isPackaged
+  ? path.join(process.resourcesPath, 'vrm', 'Nova_v1_grunge.vrm')
+  : path.resolve(__dirname, '..', '..', 'vrm_models', 'Nova_v1_grunge.vrm')
 const VRM_PATH = process.env.NOVA_VRM ? path.resolve(process.env.NOVA_VRM) : DEFAULT_VRM
 
 // Only this one file is ever served through nova-asset://, no path is taken from the URL.
@@ -27,15 +41,62 @@ let pollTimer = null
 let interactive = false
 let drag = null // { cursor, origin } while the avatar is being dragged
 let debug = process.env.NOVA_DEBUG === '1'
+let tracker = null
+let trackerStarting = false
+const privacy = createPrivacy()
+
+// ── settings: one JSON file under userData; env vars override while set (see settings.js) ──
+const SETTINGS_FILE = () => path.join(app.getPath('userData'), 'settings.json')
+let stored = settingsLib.sanitize(null)
+let netState = { status: 'connecting', retryMs: 0, attempt: 0 }
+let settingsWin = null
+let saveTimer = null
+const effectiveState = () => settingsLib.effective(stored, process.env)
+const eff = () => effectiveState().settings
+function loadSettings() {
+  const r = settingsLib.loadFrom(fs, SETTINGS_FILE())
+  stored = r.settings
+  smokeLogLine(`settings ${r.status} ${SETTINGS_FILE()}`)
+}
+function saveSettingsSoon() {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(saveSettingsNow, 300)
+}
+function saveSettingsNow() {
+  clearTimeout(saveTimer)
+  try { settingsLib.saveTo(fs, SETTINGS_FILE(), stored) } catch (err) { console.error('could not save settings', err) }
+}
+function settingsView() {
+  const { settings, locked } = effectiveState()
+  let loginItem = null
+  try { loginItem = app.getLoginItemSettings().openAtLogin } catch {}
+  return { stored, effective: settings, locked, meta: { packaged: app.isPackaged, loginItem, file: SETTINGS_FILE(), defaults: settingsLib.DEFAULTS } }
+}
+function updateSettings(patch) {
+  const before = eff()
+  stored = settingsLib.applyPatch(stored, patch)
+  saveSettingsSoon()
+  onSettingsChanged(before, eff())
+  return settingsView()
+}
+function onSettingsChanged(before, now) {
+  if (before.app.autostart !== now.app.autostart) {
+    const r = settingsLib.applyAutostart(app, now.app.autostart, app.isPackaged)
+    smokeLogLine(`autostart ${now.app.autostart} ${r.applied ? 'applied' : 'not applied (' + r.reason + ')'}`)
+  }
+  if (before.screen.trackWindow !== now.screen.trackWindow) {
+    if (now.screen.trackWindow) startWindowTracking()
+    else stopWindowTracking()
+  }
+  buildTrayMenu()
+  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && w.webContents) w.webContents.send('settings-changed')
+}
+const smokeLogLine = (line) => { if (process.env.NOVA_SMOKE_LOG) fs.appendFileSync(process.env.NOVA_SMOKE_LOG, String(line) + '\n') }
 
 function createWindow() {
-  const { workArea } = screen.getPrimaryDisplay()
-  const height = Math.min(WIN_H, workArea.height) // small displays: keep the whole window on screen
+  const { bounds } = placement.resolve(screen.getAllDisplays(), screen.getPrimaryDisplay(), stored.placement, { width: WIN_W, height: WIN_H })
   win = new BrowserWindow({
-    width: WIN_W,
-    height,
-    x: workArea.x + workArea.width - WIN_W - 24,
-    y: workArea.y + workArea.height - height,
+    ...bounds,
     transparent: true,
     frame: false,
     resizable: false,
@@ -67,9 +128,9 @@ function createWindow() {
       fs.writeFileSync(process.env.NOVA_SMOKE, img.toPNG())
       console.log('[smoke] saved', process.env.NOVA_SMOKE)
       app.quit()
-    }, 6000))
+    }, Number(process.env.NOVA_SMOKE_DELAY) || 6000))
   }
-  win.webContents.on('did-finish-load', () => win.webContents.send('debug', debug))
+  win.webContents.on('did-finish-load', () => { win.webContents.send('debug', debug); if (tracker) win.webContents.send('window', tracker.view()) })
   win.on('closed', () => { win = null })
 }
 
@@ -78,7 +139,8 @@ function startCursorPolling() {
     if (!win || !win.isVisible()) return
     const c = screen.getCursorScreenPoint()
     if (drag) {
-      win.setPosition(drag.origin.x + (c.x - drag.cursor.x), drag.origin.y + (c.y - drag.cursor.y))
+      // setBounds with the fixed size: setPosition alone can resize a transparent window when it crosses to a display with another scale factor
+      win.setBounds({ x: drag.origin.x + (c.x - drag.cursor.x), y: drag.origin.y + (c.y - drag.cursor.y), width: WIN_W, height: drag.height })
     }
     const b = win.getBounds()
     win.webContents.send('cursor', { x: c.x - b.x, y: c.y - b.y, w: b.width, h: b.height })
@@ -90,16 +152,53 @@ function createTray() {
   const icon = nativeImage.createFromBuffer(solidPng(16, 16, [150, 90, 220, 255]))
   tray = new Tray(icon)
   tray.setToolTip('Nova')
-  const rebuild = () => tray.setContextMenu(Menu.buildFromTemplate([
-    { label: win && win.isVisible() ? 'Hide Nova' : 'Show Nova', click: toggleVisible },
+  buildTrayMenu()
+  tray.on('click', () => { toggleVisible(); buildTrayMenu() })
+  tray.on('right-click', buildTrayMenu)
+}
+
+function netLabel() {
+  if (netState.status === 'online') return 'Backend: connected'
+  if (netState.status === 'offline') return `Backend: offline - retry now${netState.retryMs ? ` (auto in ${Math.max(1, Math.round(netState.retryMs / 1000))}s)` : ''}`
+  return 'Backend: connecting...'
+}
+
+function buildTrayMenu() {
+  if (!tray) return
+  const s = eff()
+  const { locked } = effectiveState()
+  tray.setToolTip(netState.status === 'online' ? 'Nova' : netState.status === 'offline' ? `Nova - backend offline, retrying (attempt ${netState.attempt || 1})` : 'Nova - connecting')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: win && win.isVisible() ? 'Hide Nova' : 'Show Nova', click: () => { toggleVisible(); buildTrayMenu() } },
+    { label: netLabel(), enabled: netState.status !== 'online', click: () => { if (win) win.webContents.send('retry-connect') } },
+    { type: 'separator' },
+    { label: 'Settings...', click: openSettingsWindow },
+    { label: 'Microphone', type: 'checkbox', checked: s.listen.micOn, enabled: !locked.includes('listen.micOn'), click: (i) => updateSettings({ listen: { micOn: i.checked } }) },
+    { label: 'Screen looks', type: 'checkbox', checked: s.screen.looks, enabled: !locked.includes('screen.looks'), click: (i) => updateSettings({ screen: { looks: i.checked } }) },
+    { label: 'Start with Windows', type: 'checkbox', checked: s.app.autostart, click: (i) => updateSettings({ app: { autostart: i.checked } }) },
+    { type: 'separator' },
     { label: 'Code (placeholder)...', click: openCodeWindow },
     { label: 'Debug overlay (Ctrl+Alt+D)', type: 'checkbox', checked: debug, click: (i) => setDebug(i.checked) },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]))
-  rebuild()
-  tray.on('click', () => { toggleVisible(); rebuild() })
-  tray.on('right-click', rebuild)
+}
+
+// Regular framed window for the settings panel (the overlay is click-through, so it cannot host form controls).
+function openSettingsWindow() {
+  if (settingsWin) { settingsWin.show(); settingsWin.focus(); return }
+  settingsWin = new BrowserWindow({
+    width: 560,
+    height: 720,
+    title: 'Nova - Settings',
+    backgroundColor: '#1b1830',
+    autoHideMenuBar: true,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  })
+  if (DEV) settingsWin.loadURL('http://localhost:5174/settings.html')
+  else settingsWin.loadFile(path.join(__dirname, '..', 'dist', 'settings.html'))
+  settingsWin.on('closed', () => { settingsWin = null })
+  settingsWin.webContents.on('console-message', (_e, level, msg) => { if (level >= 2) console.log('[settings]', msg) })
 }
 
 // Minimal uncompressed-deflate PNG encoder so the tray needs no binary asset.
@@ -161,6 +260,11 @@ function setDebug(on) {
 }
 
 app.whenReady().then(() => {
+  // The microphone, for this app's own pages only (file:// build, or the Vite dev server). Nothing else may ask for it.
+  const ownPage = (url) => /^(file:\/\/|http:\/\/(localhost|127\.0\.0\.1):5174\/)/.test(url || '')
+  session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(permission === 'media' && ownPage(wc.getURL())))
+  session.defaultSession.setPermissionCheckHandler((wc, permission) => permission === 'media' && ownPage(wc ? wc.getURL() : ''))
+
   protocol.handle('nova-asset', (req) => {
     if (new URL(req.url).hostname !== 'avatar.vrm' || !fs.existsSync(VRM_PATH)) {
       return new Response('not found', { status: 404 })
@@ -168,13 +272,20 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(VRM_PATH).toString())
   })
 
+  loadSettings()
+  const initial = eff()
+  if (app.isPackaged && initial.app.autostart !== (settingsView().meta.loginItem === true)) settingsLib.applyAutostart(app, initial.app.autostart, true)
   createWindow()
   createTray()
   startCursorPolling()
+  if (initial.screen.trackWindow) startWindowTracking()
+  for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, replaceWindow)
+  if (process.env.NOVA_OPEN_SETTINGS || process.env.NOVA_SMOKE_SETTINGS) smokeSettings()
 
   globalShortcut.register('Control+Alt+Space', openInput)
   globalShortcut.register('Control+Alt+N', toggleVisible)
   globalShortcut.register('Control+Alt+D', () => setDebug(!debug))
+  globalShortcut.register('Control+Alt+S', () => { if (win) win.webContents.send('interrupt') })   // stop talking
 })
 
 ipcMain.on('set-interactive', (_e, on) => {
@@ -192,20 +303,166 @@ function openInput() {
 }
 ipcMain.on('input-closed', () => { if (win) win.blur() })
 
+// ── active window (local only) and screen looks (on demand only) ───────────────
+// Window tracking is the setting screen.trackWindow (env NOVA_WINDOW_TRACK=0 overrides); off means screen looks always refuse. NOVA_FAKE_WINDOW='{"app":"Code.exe","title":"x"}' is a test hook.
+async function startWindowTracking() {
+  if (tracker || trackerStarting) return
+  trackerStarting = true
+  let provider
+  const fake = parseJson(process.env.NOVA_FAKE_WINDOW)
+  if (fake) {
+    provider = { name: 'fake', start: (cb) => { cb({ app: fake.app, title: fake.title || '', pid: 1, bounds: null }) }, stop() {} }
+  } else {
+    provider = (await getWindowsProvider({ intervalMs: 2000 })) || powershellProvider({ intervalMs: 1000 })
+  }
+  tracker = createTracker({
+    provider, privacy,
+    onChange: (view) => { if (win) win.webContents.send('window', view) },
+  })
+  trackerStarting = false
+  tracker.start()
+  smokeLogLine('window tracking: ' + provider.name)
+}
+function stopWindowTracking() {
+  if (!tracker) return
+  tracker.stop()
+  tracker = null
+  smokeLogLine('window tracking: off')
+  if (win) win.webContents.send('window', null)
+}
+
+// A brief border around what was captured, so a screen look is never silent.
+function flashCapture(rect) {
+  try {
+    const f = new BrowserWindow({
+      x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height),
+      transparent: true, frame: false, resizable: false, focusable: false, skipTaskbar: true, alwaysOnTop: true, show: false, hasShadow: false,
+      webPreferences: { sandbox: true, contextIsolation: true },
+    })
+    f.setIgnoreMouseEvents(true)
+    f.setAlwaysOnTop(true, 'screen-saver')
+    const html = '<style>html,body{margin:0;height:100%;background:transparent}div{position:fixed;inset:0;box-sizing:border-box;border:6px solid #a78bfa;'
+      + 'box-shadow:inset 0 0 40px rgba(167,139,250,.6);animation:f .7s ease-out forwards}@keyframes f{from{opacity:1}to{opacity:0}}</style><div></div>'
+    f.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+    f.once('ready-to-show', () => f.showInactive())
+    setTimeout(() => { if (!f.isDestroyed()) f.close() }, 900)
+    smokeLogLine(`capture flash ${Math.round(rect.width)}x${Math.round(rect.height)}`)
+  } catch {}
+}
+
+ipcMain.handle('capture-screen', async () => {
+  if (!tracker) return { ok: false, reason: 'off' }
+  const r = await captureActiveWindow({
+    desktopCapturer, screen, tracker, privacy,
+    scope: eff().screen.scope,
+    hideOverlay: () => { if (win) win.setOpacity(0) },
+    showOverlay: () => { if (win) win.setOpacity(1) },
+  })
+  if (r.ok) {
+    flashCapture(r.flashBounds)
+    smokeLogLine(`capture ok app=${r.app} ${r.width}x${r.height} jpeg=${r.bytes}B cropped=${r.cropped} in ${r.ms} ms`)
+    delete r.flashBounds
+  } else {
+    smokeLogLine(`capture refused reason=${r.reason}${r.error ? ' ' + r.error : ''}`)
+  }
+  return r
+})
+ipcMain.handle('get-window', () => (tracker ? tracker.view() : null))
+
 // Seconds since the user last touched keyboard or mouse; lets the backend decide between a desktop bubble and a phone push.
 ipcMain.handle('idle-seconds', () => powerMonitor.getSystemIdleTime())
 
-ipcMain.handle('get-config', () => ({
-  backend: process.env.NOVA_BACKEND || 'ws://127.0.0.1:8000/api/desktop/ws',
-  autoSay: process.env.NOVA_SMOKE_SAY || null, // test hook: send this text once connected
-}))
+ipcMain.handle('get-config', () => {
+  const e = eff()
+  return {
+    backend: process.env.NOVA_BACKEND || 'ws://127.0.0.1:8000/api/desktop/ws',
+    autoSay: process.env.NOVA_SMOKE_SAY || null, // test hook: send this text once connected
+    // Everything below comes from the settings file with env overrides on top (settings.js); the renderer re-reads it on 'settings-changed'.
+    backendSettings: settingsLib.toBackend(e),   // the `settings` message for the backend
+    screen: e.screen.looks && e.screen.trackWindow,
+    voiceIn: e.listen.micOn,
+    micDeviceId: e.listen.micDeviceId,
+    echoMode: e.listen.echoMode,
+    smokeWavs: smokeWavs().length, // test hook: NOVA_SMOKE_WAV=a.wav,b.wav plays these through the VAD instead of the microphone
+    smokeWavGapMs: Number(process.env.NOVA_SMOKE_WAV_GAP) || 3500,
+  }
+})
+function parseJson(text) { try { return text ? JSON.parse(text) : null } catch { return null } }
+function smokeWavs() { return (process.env.NOVA_SMOKE_WAV || '').split(',').map((p) => p.trim()).filter(Boolean) }
+ipcMain.handle('smoke-wav', (_e, i) => {
+  const file = smokeWavs()[i]
+  if (!file) throw new Error('no such smoke wav')
+  const b = fs.readFileSync(file)
+  return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)
+})
+
+ipcMain.handle('settings-get', () => settingsView())
+ipcMain.handle('settings-set', (_e, patch) => updateSettings(patch))
+ipcMain.handle('settings-reset', () => {
+  // Back to defaults, but she keeps her screen positions.
+  const before = eff()
+  stored = settingsLib.sanitize({ placement: stored.placement })
+  saveSettingsSoon()
+  onSettingsChanged(before, eff())
+  return settingsView()
+})
+ipcMain.on('open-settings', openSettingsWindow)
+ipcMain.on('net-status', (_e, info) => {
+  netState = { status: String(info && info.status), retryMs: Number(info && info.retryMs) || 0, attempt: Number(info && info.attempt) || 0 }
+  smokeLogLine(`net ${netState.status} attempt=${netState.attempt} retryMs=${netState.retryMs}`)
+  buildTrayMenu()
+})
+
+// Test hooks: NOVA_OPEN_SETTINGS=1 opens the panel at start; NOVA_SMOKE_SETTINGS=<png> also captures it; NOVA_SMOKE_SETTINGS_JS=<file> runs that script
+// in the panel first (it drives the real controls), then the capture follows. NOVA_SMOKE_SETTINGS_DELAY=<ms> waits before the capture.
+function smokeSettings() {
+  openSettingsWindow()
+  settingsWin.webContents.once('did-finish-load', async () => {
+    await new Promise((r) => setTimeout(r, 1500))
+    if (process.env.NOVA_SMOKE_SETTINGS_JS) {
+      try {
+        const out = await settingsWin.webContents.executeJavaScript(fs.readFileSync(process.env.NOVA_SMOKE_SETTINGS_JS, 'utf8'))
+        smokeLogLine('settings script: ' + JSON.stringify(out))
+      } catch (err) { smokeLogLine('settings script failed: ' + err.message) }
+    }
+    if (process.env.NOVA_SMOKE_SETTINGS) {
+      await new Promise((r) => setTimeout(r, Number(process.env.NOVA_SMOKE_SETTINGS_DELAY) || 800))
+      fs.writeFileSync(process.env.NOVA_SMOKE_SETTINGS, (await settingsWin.webContents.capturePage()).toPNG())
+      await settingsWin.webContents.executeJavaScript('window.scrollTo(0, 99999)')   // the panel is taller than the window: second capture of the bottom
+      await new Promise((r) => setTimeout(r, 300))
+      fs.writeFileSync(process.env.NOVA_SMOKE_SETTINGS.replace(/\.png$/, '-bottom.png'), (await settingsWin.webContents.capturePage()).toPNG())
+      smokeLogLine('settings panel saved ' + process.env.NOVA_SMOKE_SETTINGS)
+    }
+  })
+}
+
+// Test hook: NOVA_SMOKE_LOG=<file> collects lines the renderer reports (audio frames, playback, mouth movement).
+ipcMain.on('smoke-log', (_e, line) => {
+  if (process.env.NOVA_SMOKE_LOG) fs.appendFileSync(process.env.NOVA_SMOKE_LOG, String(line) + '\n')
+})
 
 ipcMain.on('drag-start', () => {
   if (!win) return
   const b = win.getBounds()
-  drag = { cursor: screen.getCursorScreenPoint(), origin: { x: b.x, y: b.y } }
+  drag = { cursor: screen.getCursorScreenPoint(), origin: { x: b.x, y: b.y }, height: b.height }
 })
-ipcMain.on('drag-end', () => { drag = null })
+ipcMain.on('drag-end', () => { drag = null; rememberPosition() })
 
-app.on('will-quit', () => { globalShortcut.unregisterAll(); clearInterval(pollTimer) })
+// ── placement per display ──────────────────────────────────────────────────────
+// After a drag the position is remembered as an offset from the bottom-right of the display she is on (placement.js). When displays are
+// added, removed or change resolution/scale she goes back to the remembered spot on her display (or the primary) and is clamped on screen.
+function rememberPosition() {
+  if (!win) return
+  stored.placement = placement.remember(screen.getAllDisplays(), stored.placement, win.getBounds())
+  saveSettingsSoon()
+  smokeLogLine(`position display=${stored.placement.lastDisplay} offset=${JSON.stringify(stored.placement.byDisplay[stored.placement.lastDisplay])}`)
+}
+function replaceWindow() {
+  if (!win || drag) return
+  const { bounds, display } = placement.resolve(screen.getAllDisplays(), screen.getPrimaryDisplay(), stored.placement, { width: WIN_W, height: WIN_H })
+  win.setBounds(bounds)
+  smokeLogLine(`placed on display ${display.id} at ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height} (scale ${display.scaleFactor})`)
+}
+
+app.on('will-quit', () => { saveSettingsNow(); globalShortcut.unregisterAll(); clearInterval(pollTimer); if (tracker) tracker.stop() })
 app.on('window-all-closed', () => app.quit())

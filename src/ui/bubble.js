@@ -23,11 +23,11 @@ export function createBubble(el) {
       render()
     },
     // Shows a complete message (proactive or error) and schedules its fade.
-    say(text) {
+    say(text, lingerMs = LINGER_MS) {
       clearTimeout(timer)
       sentences = [text]
       render()
-      this.fadeSoon()
+      this.fadeSoon(lingerMs)
     },
     fadeSoon(ms = LINGER_MS) {
       clearTimeout(timer)

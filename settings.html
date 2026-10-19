@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Nova - Settings</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+    <style>
+      :root { color-scheme: dark; --bg: #1b1830; --card: #25213f; --line: #3b3560; --fg: #f1eefc; --mute: #a59fc4; --accent: #a78bfa; }
+      html, body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+      main { max-width: 520px; margin: 0 auto; padding: 18px 20px 32px; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      .sub { color: var(--mute); margin: 0 0 16px; font-size: 12.5px; }
+      section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px 8px; margin-bottom: 14px; }
+      h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin: 12px 0 4px; }
+      .row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+      .row:first-of-type { border-top: 0; }
+      .row label { font-weight: 500; }
+      .hint { grid-column: 1 / -1; color: var(--mute); font-size: 12px; margin-top: -2px; }
+      .lock { color: #fbbf24; }
+      input[type=text], select { background: #15122a; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; width: 250px; min-width: 0; box-sizing: border-box; text-overflow: ellipsis; }
+      .row > span { min-width: 0; }
+      .mic { display: flex; gap: 6px; }
+      .mic select { width: 180px; }
+      input[type=text]:disabled, select:disabled, input:disabled { opacity: .5; }
+      input[type=range] { width: 170px; accent-color: var(--accent); }
+      input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+      .speed { display: flex; align-items: center; gap: 8px; }
+      .speed output { width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+      button { white-space: nowrap; background: #15122a; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+      button:hover { border-color: var(--accent); }
+      .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--mute); font-size: 12px; }
+      .foot code { word-break: break-all; }
+      .pending { opacity: .65; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Nova settings</h1>
+      <p class="sub">Changes apply immediately and are saved on this PC. A field marked "set by environment" is held by an environment variable until you remove it.</p>
+      <div id="form"></div>
+      <div class="foot"><span>File: <code id="file"></code></span><button id="reset" type="button">Reset to defaults</button></div>
+    </main>
+    <script type="module" src="/src/settings/settings.js"></script>
+  </body>
+</html>

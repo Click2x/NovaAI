@@ -78,6 +78,11 @@ export async function createAvatar(canvas, url) {
     setMouth(value) {
       if (expr) expr.setValue('aa', value)
     },
+    // Lip-sync: { aa, ih, ou, ee, oh } in 0..1, driven every frame while Nova speaks.
+    setVisemes(shapes) {
+      if (!expr) return
+      for (const k of ['aa', 'ih', 'ou', 'ee', 'oh']) expr.setValue(k, shapes[k] || 0)
+    },
     update(dt) {
       t += dt
       // Blink.

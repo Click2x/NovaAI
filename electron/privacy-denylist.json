@@ -1,0 +1,21 @@
+{
+  "_note": "Case-insensitive regular expressions (JS and Python compatible). A match on the process name or the window title makes the window private: its title is never sent to the backend and no screenshot is taken while it is in front. Read by desktop/electron/privacy.js and backend/services/screen_privacy.py.",
+  "process_patterns": [
+    "^(1password|bitwarden|keepass|keepassxc|keepassdx|lastpass|dashlane|nordpass|enpass|roboform|protonpass|proton ?pass|keeper|psono|authy|authenticator)\\b",
+    "^(discord|discordptb|discordcanary|signal|whatsapp|telegram|element|messenger|slack|ms-teams|teams|viber|wechat|line|skype|zoom)\\b",
+    "^(credentialuibroker|consent|lockapp|logonui|securityhealthsystray|windowssecurity|taskmgr|mmc|regedit)$",
+    "^(quicken|ynab|moneydance|mint|turbotax|taxact|hrblock)\\b"
+  ],
+  "title_patterns": [
+    "\\b(in ?private|incognito|private (browsing|window|mode|tab))\\b",
+    "\\(private\\)",
+    "\\bpass(word|words|key|keys|phrase)\\b",
+    "\\b(2fa|two[- ]factor|verification code|one[- ]time (code|password)|recovery (code|key)|seed phrase|secret key)\\b",
+    "\\b(bank|banking|credit union|checking account|savings account|online banking)\\b",
+    "\\b(paypal|venmo|zelle|cash ?app|coinbase|binance|kraken|robinhood|fidelity|schwab|vanguard|etrade|wells ?fargo|chase|capital one|bank of america|citibank|amex|american express|discover card|wise\\.com)\\b",
+    "\\b(direct messages?|private messages?|inbox \\(|dms?\\b)",
+    "\\b(whatsapp|messenger|telegram|signal|discord)\\b",
+    "\\b(sign ?in|log ?in|sign ?up|account recovery)\\b.*\\b(password|pin)\\b",
+    "\\b(credential manager|windows security|user account control)\\b"
+  ]
+}
