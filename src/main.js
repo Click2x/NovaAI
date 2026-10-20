@@ -1,10 +1,15 @@
 import { createAvatar } from './avatar/avatar.js'
 import { createExpressionController } from './avatar/expression.js'
 import { createSocket } from './net/socket.js'
+import { createEvents } from './net/events.js'
 import { createBubble } from './ui/bubble.js'
 import { createInput } from './ui/input.js'
 import { createLatency } from './ui/latency.js'
 import { createChips } from './ui/chips.js'
+import { createPacer } from './ui/pacing.js'
+import { createActions, createMediaCard, createDrawer, createHeard } from './ui/continuity.js'
+import { createNotifier, cardFromNotify, cardFromConfirm, cardsFromCatchup, CONFIRM_TEXT } from './ui/notify.js'
+import { decideProactive } from './ui/speakrule.js'
 import { createLipSync } from './avatar/lipsync.js'
 import { createPlayer } from './voice/player.js'
 import { createVoiceState } from './voice/state.js'
@@ -42,10 +47,51 @@ async function boot() {
   const bubble = createBubble(document.getElementById('bubble'))
   const latency = createLatency(document.getElementById('latency'))
   const chips = createChips(document.getElementById('chips'))
+  const events = createEvents()
   let socket = null
+  let config = await window.nova.getConfig()   // re-read when the settings change (see applySettings)
+
+  // ── phase 7: bubble text paced by playback, media card, thumbs/reactions, history drawer, "heard you" ──
+  const sendMsg = (m) => socket && socket.send(m)
+  const pacer = createPacer({
+    show: (text) => { bubble.setText(text); smokeLog(`bubble ${JSON.stringify(text.slice(-80))}`) },
+    onDone: () => bubble.fadeSoon(),
+  })
+  const card = createMediaCard(document.getElementById('media'), { base: config.backendHttp })
+  const actions = createActions(document.getElementById('actions'), { send: sendMsg })
+  const drawer = createDrawer(document.getElementById('drawer'), { base: config.backendHttp, send: sendMsg })
+  const heard = createHeard(document.getElementById('heard'))
+  const histBtn = document.getElementById('histbtn')
+  histBtn.onclick = () => { drawer.toggle(); histBtn.classList.toggle('open', drawer.visible()); if (drawer.visible()) card.hide() }
+
+  // ── phase 8: notification centre (cards with buttons), yes/no for held tool calls, catch-up, speak rule ──
+  const SEEN_KEY = 'nova.lastSeenMessageId'      // the newest chat message this app has shown or been told about (per install; only a convenience)
+  const lastSeen = () => { try { const v = Number(localStorage.getItem(SEEN_KEY)); return Number.isInteger(v) && v > 0 ? v : null } catch { return null } }
+  const noteSeen = (id) => { if (!Number.isInteger(id) || id <= 0) return; try { if (id > (lastSeen() || 0)) localStorage.setItem(SEEN_KEY, String(id)) } catch {} }
+  const notifier = createNotifier(document.getElementById('notes'), {
+    send: sendMsg,
+    onChange: (list) => { try { window.nova.notesState(list) } catch {} },
+    local: (card, actionId) => {
+      notifier.remove(card.id)
+      if (card.kind === 'confirm') {
+        // The buttons send the same words typed chat uses: a clear "yes" runs the held tool call, anything else cancels it (api/chat.py resolve_pending_confirmation).
+        interruptSpeech()
+        if (!sendText(CONFIRM_TEXT[actionId])) bubble.say("I can't reach the backend right now.")
+        smokeLog(`confirm answered ${actionId}`)
+      } else if (card.kind === 'catchup' && actionId === 'open' && !drawer.visible()) histBtn.click()
+    },
+  })
+  window.nova.onNotesClear(() => notifier.clear())
+  const popAllowed = () => decideProactive(config.proactive, { now: new Date() }).pop       // false during quiet hours: cards wait behind the bell
+  const hotEls = [...document.querySelectorAll('.hot')]
+  // Elements that take the mouse while the cursor is over them (shown ones only); everywhere else stays click-through.
+  const overHot = (c) => hotEls.some((e) => {
+    if (getComputedStyle(e).display === 'none') return false
+    const r = e.getBoundingClientRect()
+    return c.x >= r.left && c.x <= r.right && c.y >= r.top && c.y <= r.bottom
+  })
   let lipsync = null
   let mouthPeak = 0
-  let config = await window.nova.getConfig()   // re-read when the settings change (see applySettings)
 
   // ── voice in: state machine + VAD (started further down, once the socket exists) ──
   const micEl = document.getElementById('mic')
@@ -60,6 +106,8 @@ async function boot() {
     onPlayback: (p) => {
       socket && socket.playback(p)
       smokeLog(`playback ${p.state} turn=${p.turn_id} sentence=${p.sentence_id}`)
+      if (p.state === 'start') pacer.started(p.turn_id, p.sentence_id)
+      else pacer.ended(p.turn_id, p.sentence_id)
       if (p.state === 'start') voice.audioStarted()
       else setTimeout(() => { if (!player.isPlaying()) { state.audioTurn = null; voice.audioEnded() } }, 0)   // after the player dropped the finished clip
     },
@@ -80,58 +128,90 @@ async function boot() {
     smokeLog(`interrupt ${[...turns].join(',')}`)
   }
 
-  // ── backend events ────────────────────────────────────────────────────────
-  function onEvent(m) {
-    switch (m.type) {
-      case 'turn_start':
-        state.turn = m.turn_id
-        voice.turnStarted()
-        bubble.startTurn()
-        break
-      case 'sentence':
-        if (m.turn_id === latency.snapshot()?.turn_id) latency.mark('sentence')
-        chips.clear()
-        bubble.addSentence(m.text)
-        expression.set(m.emotion)
-        break
-      case 'turn_end':
-        if (m.metrics && m.turn_id === latency.snapshot()?.turn_id) {
-          latency.metrics(m.metrics)
-          smokeLog(`turn_end ${m.turn_id} interrupted=${m.interrupted} metrics=${JSON.stringify(m.metrics)}`)
-        }
-        bubble.fadeSoon()
-        chips.clear()
-        if (state.turn === m.turn_id) state.turn = null
-        voice.turnEnded()
-        break
-      case 'transcript':
-        onTranscript(m)
-        break
-      case 'tool':
-        chips.tool(m)
-        smokeLog(`chip ${m.name} ${chips.labels().join('|')}`)
-        break
-      case 'capture_request':
-        onCaptureRequest(m)
-        break
-      case 'state':
-        if (m.phase === 'busy') smokeLog('state busy (gpu_busy)')
-        break
-      case 'proactive':
-        bubble.say(m.text)
-        expression.set(m.emotion || 'neutral')
-        break
-      case 'error':
-        bubble.say('Something went wrong: ' + m.message)
-        break
+  // ── backend events: modules subscribe with events.on(type, fn) (src/net/events.js) ──
+  events.on('turn_start', (m) => {
+    state.turn = m.turn_id
+    voice.turnStarted()
+    bubble.startTurn()
+    pacer.begin(m.turn_id, config.backendSettings.tts)     // with speech on, her words appear as she says them
+    actions.hide()
+  })
+  events.on('turn_start', () => notifier.remove('confirm'))      // a new turn answers (or abandons) the held tool call
+  events.on('sentence', (m) => {
+    if (m.turn_id === latency.snapshot()?.turn_id) latency.mark('sentence')
+    chips.clear()
+    pacer.sentence(m.turn_id, m.sentence_id, m.text)
+    expression.set(m.emotion)
+  })
+  events.on('turn_end', (m) => {
+    if (m.metrics && m.turn_id === latency.snapshot()?.turn_id) {
+      latency.metrics(m.metrics)
+      smokeLog(`turn_end ${m.turn_id} interrupted=${m.interrupted} metrics=${JSON.stringify(m.metrics)}`)
     }
-  }
+    pacer.finish(m.turn_id, m.interrupted)         // fades the bubble once the last sentence has been said
+    chips.clear()
+    if (m.media && card.show(m.media)) smokeLog(`media card ${JSON.stringify(Object.keys(m.media))}`)
+    if (!m.interrupted) actions.show(m.message_id)
+    noteSeen(m.message_id)
+    if (state.turn === m.turn_id) state.turn = null
+    voice.turnEnded()
+  })
+  events.on('media', (m) => { card.late(m.image_url); smokeLog(`media late message=${m.message_id}`) })
+  events.on('history', (m) => { drawer.page(m); smokeLog(`history page ${(m.messages || []).length} has_more=${!!m.has_more}`) })
+  events.on('feedback_ack', (m) => { actions.ack(m); drawer.ack(m); smokeLog(`feedback_ack ${m.message_id} ${m.rating}`) })
+  events.on('react_ack', (m) => { actions.reacted(m); drawer.reacted(m); smokeLog(`react_ack ${m.message_id} ${(m.reactions || []).join('')}`) })
+  events.on('transcript', (m) => onTranscript(m))
+  events.on('tool', (m) => {
+    chips.tool(m)
+    smokeLog(`chip ${m.name} ${chips.labels().join('|')}`)
+  })
+  events.on('capture_request', (m) => onCaptureRequest(m))
+  events.on('state', (m) => { if (m.phase === 'busy') smokeLog('state busy (gpu_busy)') })
+  events.on('confirm', (m) => { const c = cardFromConfirm(m); if (c) { notifier.add(c); smokeLog(`confirm card ${m.tool}`) } })
+  events.on('notify', (m) => {
+    const c = cardFromNotify(m)
+    if (c) { notifier.add(c, { pop: popAllowed() }); smokeLog(`notify ${c.kind} ${c.id} actions=${c.actions.map((a) => a.id).join(',')}`) }
+  })
+  events.on('notify_ack', (m) => { notifier.ack(m); smokeLog(`notify_ack ${m.id} ok=${m.ok}`) })
+  events.on('catchup', (m) => {
+    for (const c of cardsFromCatchup(m)) notifier.add(c, { pop: popAllowed() })
+    noteSeen(m.latest_id)
+    smokeLog(`catchup messages=${(m.messages || []).length} reviews=${(m.reviews || []).length} latest=${m.latest_id}`)
+  })
+  // A message she starts herself (reminder, outreach). The speak rule (user settings) decides whether it is also said aloud; quiet hours
+  // keep it off the screen and put it behind the bell instead.
+  events.on('proactive', async (m) => {
+    noteSeen(m.message_id)
+    const rule = config.proactive
+    let fg = {}
+    if (rule.speak !== 'off') { try { fg = await window.nova.foregroundState() } catch {} }
+    const d = decideProactive(rule, { now: new Date(), visible: fg.visible, fullscreen: fg.fullscreen ?? null, ttsOn: !!config.backendSettings.tts, talking: player.isPlaying() || !!state.turn })
+    smokeLog(`proactive ${d.reason} speak=${d.speak} pop=${d.pop}`)
+    if (d.pop) {
+      bubble.say(m.text)
+      expression.set(m.emotion || 'neutral')
+    } else {
+      notifier.add({ id: 'msg-' + (m.id || Date.now().toString(36)), kind: 'message', title: 'Nova said', body: m.text, actions: [], local: true }, { pop: false })
+    }
+    if (d.speak && typeof m.id === 'string' && socket) {
+      player.allow(m.id)
+      socket.send({ type: 'speak', id: m.id, text: m.text })
+    }
+  })
+  events.on('error', (m) => {
+    if (m.code === 'tts_failed') { pacer.release(m.turn_id); return }      // text only from here: show what is waiting for audio
+    if (m.code === 'history_failed') drawer.failed()
+    bubble.say('Something went wrong: ' + m.message)
+  })
+  events.on('hello_ack', (m) => { try { window.nova.backendVersion(m.backend_version) } catch {} })   // main compares it with the app version (electron/version.js)
+  events.on('hello_ack', (m) => smokeLog(`hello_ack protocol=${m.protocol} backend=${m.backend_version || '-'} features=${(m.features || []).join(',')}`))
 
   // Binary audio frame -> player. Frames of an interrupted turn are dropped by the player.
   function onAudio(h, pcm) {
     state.audioTurn = h.turn_id
     if (h.turn_id === latency.snapshot()?.turn_id) latency.mark('frame')
     smokeLog(`audio turn=${h.turn_id} sentence=${h.sentence_id} samples=${pcm.length} sr=${h.sr} dur_ms=${h.dur_ms} tts_ms=${h.tts_ms} at=${h.t_ms}`)
+    pacer.audio(h.turn_id, h.sentence_id, h.dur_ms)
     player.enqueue(h.turn_id, h.sentence_id, pcm, h.sr)
     if (!lipsync) lipsync = createLipSync({ analyser: player.analyser(), apply: (shapes) => avatar.setVisemes(shapes) })
   }
@@ -176,7 +256,7 @@ async function boot() {
   }
   window.nova.onRetry(() => socket && socket.retryNow())
 
-  socket = createSocket({ url: config.backend, onEvent, onAudio, onStatus, onOpen: () => { sendVoiceSettings(); setTimeout(sendWindow, 200) } })
+  socket = createSocket({ url: config.backend, onEvent: events.emit, onAudio, onStatus, onOpen: () => { sendVoiceSettings(); setTimeout(sendWindow, 200); socket.send({ type: 'catchup', since_id: lastSeen() }) } })
   const sendText = (text) => {
     const id = socket.sendText(text)
     if (id) { latency.start(id); player.allow(id) }
@@ -201,6 +281,7 @@ async function boot() {
     if (m.keyword === 'stop') { interruptSpeech(); voice.interrupted(); return }
     if (m.keyword === 'sleep') { interruptSpeech(); voice.sleep(); return }
     if (m.keyword === 'wake') voice.wake(!!m.command)
+    if (m.keyword === 'wake' || (!m.ignored && m.purpose === 'command')) heard.show(m.keyword === 'wake' ? m.command : m.text)   // she heard you: shown before the model answers
     if (m.ignored) return
     const startsTurn = m.keyword === 'wake' ? !!m.command : m.purpose === 'command'
     if (!startsTurn) return
@@ -290,6 +371,13 @@ async function boot() {
   window.nova.onOpenInput(() => input.show())
   window.nova.onInterrupt(interruptSpeech)
   if (config.autoSay) setTimeout(() => sendText(config.autoSay), 2500)
+  if (config.smokeUi) {      // test hook (NOVA_SMOKE_UI): click the thumbs/reaction/history controls the way a user would
+    const ui = config.smokeUi.split(',')
+    const click = (sel, i) => { const b = document.querySelectorAll(sel)[i]; smokeLog(`smoke click ${sel}[${i}] ${b ? b.title : 'missing'}`); b && b.click() }
+    if (ui.includes('rate')) setTimeout(() => click('#actions .rb', 0), 5000)
+    if (ui.includes('react')) setTimeout(() => click('#actions .rb', 2), 5500)
+    if (ui.includes('drawer')) setTimeout(() => click('#histbtn', 0), 6000)
+  }
 
   // ── drag by grabbing the avatar; a click without movement opens the input ─
   let downAt = null
@@ -337,7 +425,7 @@ async function boot() {
       avatar.lookAtNormalized((c.x / c.w) * 2 - 1, 1 - (c.y / c.h) * 2)
       // Stay interactive while dragging or typing; otherwise only while the cursor is over avatar pixels.
       const over = c.x >= 0 && c.y >= 0 && c.x < c.w && c.y < c.h && avatar.alphaAt(c.x, c.y) >= HIT_ALPHA
-      setInteractive(state.dragging || input.isOpen() || over)
+      setInteractive(state.dragging || input.isOpen() || over || overHot(c))
       statusEl.textContent = `${state.net}  cursor ${Math.round(c.x)},${Math.round(c.y)}  ${state.interactive ? 'AVATAR' : 'click-through'}`
     }
     requestAnimationFrame(frame)

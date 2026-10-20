@@ -4,7 +4,7 @@
 // and forwarded mouse-moves are unreliable on Windows. So the main process polls the global cursor,
 // sends it (window-relative) to the renderer, and the renderer reads the alpha of the pixel under
 // the cursor and answers with set-interactive. The window ignores the mouse except over the avatar.
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, protocol, net, nativeImage, powerMonitor, session, desktopCapturer } = require('electron')
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, protocol, net, nativeImage, powerMonitor, session, desktopCapturer, shell } = require('electron')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const fs = require('fs')
@@ -13,6 +13,12 @@ const { createTracker, powershellProvider, getWindowsProvider } = require('./win
 const { captureActiveWindow } = require('./capture')
 const settingsLib = require('./settings')
 const placement = require('./placement')
+const { SECTION, registerTraySection, buildTemplate } = require('./tray')
+const { createHome } = require('./home')
+const services = require('./services')
+const { registerUpdates } = require('./updates')
+const { registerVersionHandshake } = require('./version')
+const { spawn } = require('child_process')
 
 // NOVA_USER_DATA=<dir> keeps a test run's settings away from the real ones.
 if (process.env.NOVA_USER_DATA) app.setPath('userData', path.resolve(process.env.NOVA_USER_DATA))
@@ -148,13 +154,14 @@ function startCursorPolling() {
 }
 
 function createTray() {
-  // 16x16 solid purple square, placeholder until there is a real icon.
-  const icon = nativeImage.createFromBuffer(solidPng(16, 16, [150, 90, 220, 255]))
+  // build/icon.png (tools/make-icon.js) ships in the package; the solid square is only the fallback if the file is missing.
+  let icon = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png'))
+  icon = icon.isEmpty() ? nativeImage.createFromBuffer(solidPng(16, 16, [150, 90, 220, 255])) : icon.resize({ width: 16, height: 16, quality: 'best' })
   tray = new Tray(icon)
   tray.setToolTip('Nova')
   buildTrayMenu()
   tray.on('click', () => { toggleVisible(); buildTrayMenu() })
-  tray.on('right-click', buildTrayMenu)
+  tray.on('right-click', () => { buildTrayMenu(); healthPoller.refresh() })
 }
 
 function netLabel() {
@@ -163,26 +170,91 @@ function netLabel() {
   return 'Backend: connecting...'
 }
 
+// The menu is a registry of sections (tray.js); later phases register their own. Order numbers: see SECTION.
 function buildTrayMenu() {
   if (!tray) return
-  const s = eff()
-  const { locked } = effectiveState()
-  tray.setToolTip(netState.status === 'online' ? 'Nova' : netState.status === 'offline' ? `Nova - backend offline, retrying (attempt ${netState.attempt || 1})` : 'Nova - connecting')
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: win && win.isVisible() ? 'Hide Nova' : 'Show Nova', click: () => { toggleVisible(); buildTrayMenu() } },
-    { label: netLabel(), enabled: netState.status !== 'online', click: () => { if (win) win.webContents.send('retry-connect') } },
-    { type: 'separator' },
-    { label: 'Settings...', click: openSettingsWindow },
-    { label: 'Microphone', type: 'checkbox', checked: s.listen.micOn, enabled: !locked.includes('listen.micOn'), click: (i) => updateSettings({ listen: { micOn: i.checked } }) },
-    { label: 'Screen looks', type: 'checkbox', checked: s.screen.looks, enabled: !locked.includes('screen.looks'), click: (i) => updateSettings({ screen: { looks: i.checked } }) },
-    { label: 'Start with Windows', type: 'checkbox', checked: s.app.autostart, click: (i) => updateSettings({ app: { autostart: i.checked } }) },
-    { type: 'separator' },
-    { label: 'Code (placeholder)...', click: openCodeWindow },
-    { label: 'Debug overlay (Ctrl+Alt+D)', type: 'checkbox', checked: debug, click: (i) => setDebug(i.checked) },
-    { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() },
-  ]))
+  tray.setToolTip((netState.status === 'online' ? 'Nova' : netState.status === 'offline' ? `Nova - backend offline, retrying (attempt ${netState.attempt || 1})` : 'Nova - connecting') + versionCheck.tooltipSuffix())
+  const ctx = { settings: eff(), locked: effectiveState().locked, visible: !!(win && win.isVisible()), net: netState }
+  tray.setContextMenu(Menu.buildFromTemplate(buildTemplate(ctx, {
+    quit: () => app.quit(),
+    onError: (err, section) => console.error('tray section failed', section.order, err),
+  })))
 }
+
+registerTraySection(SECTION.NOVA, (ctx) => [
+  { label: ctx.visible ? 'Hide Nova' : 'Show Nova', click: () => { toggleVisible(); buildTrayMenu() } },
+  { label: netLabel(), enabled: ctx.net.status !== 'online', click: () => { if (win) win.webContents.send('retry-connect') } },
+])
+registerTraySection(SECTION.NOVA + 1, () => [
+  { label: 'Open Nova Home (Ctrl+Alt+H)', click: () => openHome() },
+  { label: 'Settings...', click: openSettingsWindow },
+  { label: 'Start with Windows', type: 'checkbox', checked: eff().app.autostart, click: (i) => updateSettings({ app: { autostart: i.checked } }) },
+])
+registerTraySection(SECTION.VOICE, (ctx) => [
+  { label: 'Microphone', type: 'checkbox', checked: ctx.settings.listen.micOn, enabled: !ctx.locked.includes('listen.micOn'), click: (i) => updateSettings({ listen: { micOn: i.checked } }) },
+])
+registerTraySection(SECTION.SCREEN, (ctx) => [
+  { label: 'Screen looks', type: 'checkbox', checked: ctx.settings.screen.looks, enabled: !ctx.locked.includes('screen.looks'), click: (i) => updateSettings({ screen: { looks: i.checked } }) },
+])
+registerTraySection(SECTION.CODE, () => [{ label: 'Code (placeholder)...', click: openCodeWindow }])
+registerTraySection(SECTION.DEBUG, () => [{ label: 'Debug overlay (Ctrl+Alt+D)', type: 'checkbox', checked: debug, click: (i) => setDebug(i.checked) }])
+
+// ── Nova Home (the React web app in a framed window) and backend lifecycle ──
+const home = createHome({
+  BrowserWindow, shell, session,
+  getSettings: eff,
+  getBackendUrl: () => settingsLib.backendHttpUrl(eff(), process.env),
+  version: app.getVersion(),
+  smokeLog: (line) => smokeLogLine(line),
+})
+const openHome = (panel) => home.openHome(panel)
+
+let health = null
+const healthPoller = services.createHealthPoller({
+  getBase: () => settingsLib.backendHttpUrl(eff(), process.env),
+  onChange: (h) => { health = h; smokeLogLine(`health ${services.healthLabel(h)}`); buildTrayMenu() },
+})
+services.registerServices({
+  registerTraySection, SECTION, spawn, fs, shell,
+  getSettings: eff,
+  getLogFile: () => path.join(app.getPath('userData'), 'logs', 'start.log'),
+  getHealth: () => health,
+  isSocketOnline: () => netState.status === 'online',
+  poller: healthPoller,
+  rebuildTray: buildTrayMenu,
+  smokeLog: (line) => smokeLogLine(line),
+})
+
+// P9 tray GPU submenu (what is loaded, what holds the card, Free GPU / Load chat model); loopback backend only
+const gpuTray = require('./gpu').registerGpu({ registerTraySection, getBase: () => settingsLib.backendHttpUrl(eff(), process.env), isBackendOnline: () => !!(health && health.online) || netState.status === 'online', rebuildTray: buildTrayMenu })
+
+require('./today').registerToday({ registerTraySection, SECTION, getBase: () => settingsLib.backendHttpUrl(eff(), process.env), openHome, rebuildTray: buildTrayMenu }).start()  // P10 tray "Today"
+
+require('./training').registerTraining({ registerTraySection, getBase: () => settingsLib.backendHttpUrl(eff(), process.env), openHome, rebuildTray: buildTrayMenu }).start()  // P11 tray "Review N training pairs"
+
+// P8 notification centre: the overlay holds the cards and reports the list; the tray shows a count and "Clear notifications".
+const notes = require('./notifications').registerNotifications({
+  registerTraySection, rebuildTray: buildTrayMenu,
+  clear: () => { if (win && !win.isDestroyed()) win.webContents.send('notes-clear') },
+})
+ipcMain.on('notes-state', (_e, list) => notes.setItems(list))
+// What the speak rule needs to know right now: is her window showing, and is a fullscreen app in front (null = unknown, e.g. window tracking is off).
+ipcMain.handle('foreground-state', () => {
+  const visible = !!(win && !win.isDestroyed() && win.isVisible() && !win.isMinimized())
+  const w = tracker && tracker.latest()
+  let fullscreen = null
+  if (w && w.bounds && tracker.ageMs() < 15000) fullscreen = require('./notifications').isFullscreenWindow(w, screen.getDisplayNearestPoint({ x: Math.round(w.bounds.x + w.bounds.width / 2), y: Math.round(w.bounds.y + w.bounds.height / 2) }))
+  return { visible, fullscreen }
+})
+
+// Version handshake (backend_version from hello_ack, forwarded by the renderer) and the manual update check from a local folder.
+const versionCheck = registerVersionHandshake({
+  registerTraySection, SECTION, getAppVersion: () => app.getVersion(), rebuildTray: buildTrayMenu, log: (line) => smokeLogLine(line),
+})
+ipcMain.on('backend-version', (_e, v) => versionCheck.setBackendVersion(v))
+registerUpdates({
+  registerTraySection, SECTION, fs, shell, getSettings: eff, getVersion: () => app.getVersion(), rebuildTray: buildTrayMenu, log: (line) => smokeLogLine(line),
+})
 
 // Regular framed window for the settings panel (the overlay is click-through, so it cannot host form controls).
 function openSettingsWindow() {
@@ -261,6 +333,7 @@ function setDebug(on) {
 
 app.whenReady().then(() => {
   // The microphone, for this app's own pages only (file:// build, or the Vite dev server). Nothing else may ask for it.
+  // The Home window (web content) lives in its own session partition with every permission denied (home.js), so these handlers never see it.
   const ownPage = (url) => /^(file:\/\/|http:\/\/(localhost|127\.0\.0\.1):5174\/)/.test(url || '')
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(permission === 'media' && ownPage(wc.getURL())))
   session.defaultSession.setPermissionCheckHandler((wc, permission) => permission === 'media' && ownPage(wc ? wc.getURL() : ''))
@@ -277,14 +350,18 @@ app.whenReady().then(() => {
   if (app.isPackaged && initial.app.autostart !== (settingsView().meta.loginItem === true)) settingsLib.applyAutostart(app, initial.app.autostart, true)
   createWindow()
   createTray()
+  healthPoller.start()
+  gpuTray.start()
   startCursorPolling()
   if (initial.screen.trackWindow) startWindowTracking()
   for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, replaceWindow)
   if (process.env.NOVA_OPEN_SETTINGS || process.env.NOVA_SMOKE_SETTINGS) smokeSettings()
+  if (process.env.NOVA_SMOKE_HOME) smokeHome()
 
   globalShortcut.register('Control+Alt+Space', openInput)
   globalShortcut.register('Control+Alt+N', toggleVisible)
   globalShortcut.register('Control+Alt+D', () => setDebug(!debug))
+  globalShortcut.register('Control+Alt+H', () => openHome())
   globalShortcut.register('Control+Alt+S', () => { if (win) win.webContents.send('interrupt') })   // stop talking
 })
 
@@ -375,10 +452,13 @@ ipcMain.handle('idle-seconds', () => powerMonitor.getSystemIdleTime())
 ipcMain.handle('get-config', () => {
   const e = eff()
   return {
-    backend: process.env.NOVA_BACKEND || 'ws://127.0.0.1:8000/api/desktop/ws',
+    backend: settingsLib.backendWsUrl(e, process.env),   // NOVA_BACKEND (ws://...) still wins
+    smokeUi: process.env.NOVA_SMOKE_UI || '',   // test hook: comma list of rate, react, drawer; the overlay clicks those controls itself
+    backendHttp: settingsLib.backendHttpUrl(e, process.env),   // where the overlay loads pictures and video from
     autoSay: process.env.NOVA_SMOKE_SAY || null, // test hook: send this text once connected
     // Everything below comes from the settings file with env overrides on top (settings.js); the renderer re-reads it on 'settings-changed'.
     backendSettings: settingsLib.toBackend(e),   // the `settings` message for the backend
+    proactive: e.proactive,                      // P8 speak rule + quiet hours (decided in the overlay, src/ui/speakrule.js)
     screen: e.screen.looks && e.screen.trackWindow,
     voiceIn: e.listen.micOn,
     micDeviceId: e.listen.micDeviceId,
@@ -436,6 +516,26 @@ function smokeSettings() {
   })
 }
 
+// Test hook: NOVA_SMOKE_HOME=<png> opens Home on #panel=<NOVA_SMOKE_HOME_PANEL, default memory>, waits, reports what the page sees, saves a capture and quits.
+// NOVA_SMOKE_HOME_DELAY=<ms> waits before the capture (default 3000); NOVA_SMOKE_HOME_JS=<file> runs that script in the page first.
+async function smokeHome() {
+  const panel = process.env.NOVA_SMOKE_HOME_PANEL || 'memory'
+  const r = await openHome(panel)
+  const wc = home.getWindow().webContents
+  if (wc.isLoading()) await Promise.race([new Promise((res) => wc.once('did-finish-load', res)), new Promise((res) => setTimeout(res, 10000))])
+  smokeLogLine('home loading=' + wc.isLoading())
+  await new Promise((res) => setTimeout(res, Number(process.env.NOVA_SMOKE_HOME_DELAY) || 3000))
+  try {
+    const info = await wc.executeJavaScript(`JSON.stringify({ href: location.href, title: document.title, isDesktop: !!(window.novaDesktop && window.novaDesktop.isDesktop), version: window.novaDesktop && window.novaDesktop.version,
+      nodeLeak: typeof require + '/' + typeof process, nova: typeof window.nova, serviceWorker: navigator.serviceWorker ? 'present' : 'none', text: document.body.innerText.slice(0, 160) })`)
+    smokeLogLine('home page ' + info)
+    if (process.env.NOVA_SMOKE_HOME_JS) smokeLogLine('home script ' + JSON.stringify(await wc.executeJavaScript(fs.readFileSync(process.env.NOVA_SMOKE_HOME_JS, 'utf8'))))
+  } catch (err) { smokeLogLine('home page script failed: ' + err.message) }
+  fs.writeFileSync(process.env.NOVA_SMOKE_HOME, (await wc.capturePage()).toPNG())
+  smokeLogLine(`home saved ${process.env.NOVA_SMOKE_HOME} source=${r.source}`)
+  app.quit()
+}
+
 // Test hook: NOVA_SMOKE_LOG=<file> collects lines the renderer reports (audio frames, playback, mouth movement).
 ipcMain.on('smoke-log', (_e, line) => {
   if (process.env.NOVA_SMOKE_LOG) fs.appendFileSync(process.env.NOVA_SMOKE_LOG, String(line) + '\n')
@@ -464,5 +564,5 @@ function replaceWindow() {
   smokeLogLine(`placed on display ${display.id} at ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height} (scale ${display.scaleFactor})`)
 }
 
-app.on('will-quit', () => { saveSettingsNow(); globalShortcut.unregisterAll(); clearInterval(pollTimer); if (tracker) tracker.stop() })
+app.on('will-quit', () => { saveSettingsNow(); healthPoller.stop(); gpuTray.stop(); globalShortcut.unregisterAll(); clearInterval(pollTimer); if (tracker) tracker.stop() })
 app.on('window-all-closed', () => app.quit())

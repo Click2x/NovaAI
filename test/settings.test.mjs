@@ -103,7 +103,7 @@ test('env overrides: bad values are ignored, wake words JSON, truthy forms', () 
 
 test('toBackend matches what backend apply_settings reads', () => {
   const b = S.toBackend(S.effective(S.applyPatch(S.DEFAULTS, { listen: { echoMode: 'headphones' }, voice: { fastModel: true } })).settings)
-  assert.deepEqual(Object.keys(b).sort(), ['echo_mode', 'fast_model', 'screen', 'speed', 'tts', 'voice', 'wake_words'])
+  assert.deepEqual(Object.keys(b).sort(), ['echo_mode', 'fast_model', 'gpu', 'mode', 'nsfw', 'screen', 'speed', 'tts', 'voice', 'wake_words'])
   assert.equal(b.echo_mode, 'headphones')
   assert.equal(b.fast_model, true)
   assert.deepEqual(b.wake_words, { wake: ['hey nova'], stop: ['nova stop'], sleep: ['goodnight nova'] })

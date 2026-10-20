@@ -15,13 +15,21 @@ const DEFAULTS = Object.freeze({
   voice: { tts: true, voice: 'af_heart', speed: 1.0, fastModel: false },
   listen: { micOn: true, micDeviceId: '', echoMode: 'speakers', words: DEFAULT_PHRASES },
   screen: { looks: true, scope: 'window', trackWindow: true },
+  chat: { mode: 'companion', nsfw: false },   // persona mode and NSFW for chat from the overlay; NSFW stays off until the user turns it on (roadmap D4)
   autonomy: { mode: 'ask' },        // placeholder: stored for the agent phase, nothing reads it yet
-  app: { autostart: false },
+  app: { autostart: false, updateFolder: '' },   // updateFolder: where newer 'Nova Setup x.y.z.exe' files are looked for (updates.js); empty = off
+  home: { url: 'auto' },            // 'auto' = <backend.url>/app/ when it answers, else the Vite dev server (see home.js); or any http(s) URL
+  backend: { url: 'http://127.0.0.1:8000', startScript: 'C:\\scripts\\start_nova.ps1', controlUrl: 'http://127.0.0.1:8765' },
+  models: { agentSwap: 'always', agentModel: '', chatReloadMinutes: 5 },   // GPU swap policy (roadmap D10), applied by the backend arbiter; agentModel '' = the backend's default
+  proactive: { speak: 'off', quietEnabled: false, quietStart: '22:00', quietEnd: '08:00' },   // P8 (roadmap D12): say her own messages aloud? off by default; quiet hours silence and hide pop-ups (cards wait in the centre)
   placement: { lastDisplay: null, byDisplay: {} },   // see placement.js
 })
 
 const AUTONOMY_MODES = ['ask', 'plan', 'auto']
+const AGENT_SWAPS = ['always', 'never']
+const CHAT_MODES = ['companion', 'friend', 'assistant', 'buddy']   // same as backend/api/desktop.py CHAT_MODES
 const ECHO_MODES = ['speakers', 'headphones']
+const SPEAK_MODES = ['off', 'when_visible_and_not_fullscreen']
 const SCOPES = ['window', 'screen']
 const VOICE_RE = /^[a-z]{2}_[a-z0-9]{2,20}$/        // Kokoro ids: af_heart, bm_george
 const WORD_KINDS = ['wake', 'stop', 'sleep']
@@ -53,6 +61,56 @@ function cleanSpeed(v, fallback) {
   return Math.round(Math.min(2.0, Math.max(0.5, v)) * 100) / 100
 }
 
+// An http(s) URL without credentials or a trailing slash (backend.url, controlUrl); anything else keeps `fallback`.
+function cleanHttpUrl(v, fallback) {
+  if (typeof v !== 'string' || v.length > 300) return fallback
+  let u
+  try { u = new URL(v.trim()) } catch { return fallback }
+  if ((u.protocol !== 'http:' && u.protocol !== 'https:') || u.username || u.password) return fallback
+  return u.href.replace(/\/+$/, '')
+}
+// home.url: 'auto' (any case) or an http(s) URL. Keeps the path (e.g. /app/), so no slash is stripped.
+function cleanHomeUrl(v, fallback) {
+  if (typeof v !== 'string') return fallback
+  if (v.trim().toLowerCase() === 'auto') return 'auto'
+  if (v.length > 300) return fallback
+  let u
+  try { u = new URL(v.trim()) } catch { return fallback }
+  return (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password ? u.href : fallback
+}
+// A file path for the start script: non-empty, one line, no control characters. Whether it exists is checked when it is run.
+function cleanPath(v, fallback) {
+  if (typeof v !== 'string') return fallback
+  const t = v.trim()
+  return t && t.length <= 260 && !/[\u0000-\u001f"]/.test(t) ? t : fallback
+}
+
+// A folder path that may be empty (empty clears it): one line, no control characters, no quotes.
+function cleanFolder(v, fallback) {
+  if (typeof v !== 'string') return fallback
+  const t = v.trim()
+  if (!t) return ''
+  return t.length <= 260 && !/[\u0000-\u001f"]/.test(t) ? t : fallback
+}
+
+// An Ollama model tag: one line, no spaces or quotes. Empty means "the backend's default".
+function cleanModelTag(v, fallback) {
+  if (typeof v !== 'string') return fallback
+  const t = v.trim()
+  return t === '' || (t.length <= 200 && /^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/.test(t)) ? t : fallback
+}
+// Minutes before the chat model is loaded again after an agent swap: 0 (never; the next chat loads it) to 1440, one decimal.
+function cleanMinutes(v, fallback) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return fallback
+  return Math.round(Math.min(1440, Math.max(0, v)) * 10) / 10
+}
+
+// A 24-hour clock time "HH:MM" (one or two digit hour); stored as zero-padded "HH:MM". Anything else keeps `fallback`.
+function cleanClock(v, fallback) {
+  const m = typeof v === 'string' ? /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(v.trim()) : null
+  return m ? m[1].padStart(2, '0') + ':' + m[2] : fallback
+}
+
 function cleanPlacement(v, fallback) {
   if (!isObj(v)) return fallback
   const byDisplay = {}
@@ -78,7 +136,12 @@ function sanitizeRaw(input, base) {
   const words = isObj(listen.words) ? listen.words : {}
   const screen = isObj(src.screen) ? src.screen : {}
   const autonomy = isObj(src.autonomy) ? src.autonomy : {}
+  const chat = isObj(src.chat) ? src.chat : {}
   const app = isObj(src.app) ? src.app : {}
+  const home = isObj(src.home) ? src.home : {}
+  const backend = isObj(src.backend) ? src.backend : {}
+  const models = isObj(src.models) ? src.models : {}
+  const proactive = isObj(src.proactive) ? src.proactive : {}
   const outWords = {}
   for (const k of WORD_KINDS) outWords[k] = cleanPhrases(words[k], b.listen.words[k])
   return {
@@ -100,8 +163,26 @@ function sanitizeRaw(input, base) {
       scope: oneOf(screen.scope, SCOPES, b.screen.scope),
       trackWindow: bool(screen.trackWindow, b.screen.trackWindow),
     },
+    chat: { mode: oneOf(chat.mode, CHAT_MODES, b.chat.mode), nsfw: bool(chat.nsfw, b.chat.nsfw) },
     autonomy: { mode: oneOf(autonomy.mode, AUTONOMY_MODES, b.autonomy.mode) },
-    app: { autostart: bool(app.autostart, b.app.autostart) },
+    app: { autostart: bool(app.autostart, b.app.autostart), updateFolder: cleanFolder(app.updateFolder, b.app.updateFolder) },
+    home: { url: cleanHomeUrl(home.url, b.home.url) },
+    backend: {
+      url: cleanHttpUrl(backend.url, b.backend.url),
+      startScript: cleanPath(backend.startScript, b.backend.startScript),
+      controlUrl: cleanHttpUrl(backend.controlUrl, b.backend.controlUrl),
+    },
+    models: {
+      agentSwap: oneOf(models.agentSwap, AGENT_SWAPS, b.models.agentSwap),
+      agentModel: cleanModelTag(models.agentModel, b.models.agentModel),
+      chatReloadMinutes: cleanMinutes(models.chatReloadMinutes, b.models.chatReloadMinutes),
+    },
+    proactive: {
+      speak: oneOf(proactive.speak, SPEAK_MODES, b.proactive.speak),
+      quietEnabled: bool(proactive.quietEnabled, b.proactive.quietEnabled),
+      quietStart: cleanClock(proactive.quietStart, b.proactive.quietStart),
+      quietEnd: cleanClock(proactive.quietEnd, b.proactive.quietEnd),
+    },
     placement: cleanPlacement(src.placement, b.placement),
   }
 }
@@ -146,6 +227,10 @@ function envOverrides(env = {}) {
   if (has('NOVA_SCREEN')) set('screen', 'looks', env.NOVA_SCREEN !== '0')
   if (has('NOVA_SCREEN_SCOPE') && SCOPES.includes(env.NOVA_SCREEN_SCOPE)) set('screen', 'scope', env.NOVA_SCREEN_SCOPE)
   if (has('NOVA_WINDOW_TRACK')) set('screen', 'trackWindow', env.NOVA_WINDOW_TRACK !== '0')
+  if (has('NOVA_CHAT_MODE') && CHAT_MODES.includes(env.NOVA_CHAT_MODE)) set('chat', 'mode', env.NOVA_CHAT_MODE)
+  if (has('NOVA_NSFW')) set('chat', 'nsfw', env.NOVA_NSFW === '1')
+  if (has('NOVA_HOME_URL')) set('home', 'url', env.NOVA_HOME_URL)
+  if (has('NOVA_START_SCRIPT')) set('backend', 'startScript', env.NOVA_START_SCRIPT)
   return { patch, locked }
 }
 
@@ -158,6 +243,22 @@ function effective(stored, env = {}) {
   return { settings: sanitize(merged, base), locked }
 }
 
+// The backend's HTTP origin the app talks to: NOVA_BACKEND (a ws:// URL, a test/override hook) wins over backend.url, so a run against a
+// mock backend never polls the real one.
+function backendHttpUrl(eff, env = {}) {
+  if (env.NOVA_BACKEND) {
+    try {
+      const u = new URL(env.NOVA_BACKEND)
+      return `${u.protocol === 'wss:' ? 'https:' : 'http:'}//${u.host}`
+    } catch { /* fall through to the setting */ }
+  }
+  return eff.backend.url
+}
+function backendWsUrl(eff, env = {}) {
+  if (env.NOVA_BACKEND) return env.NOVA_BACKEND
+  return backendHttpUrl(eff, env).replace(/^http/, 'ws') + '/api/desktop/ws'
+}
+
 // What the backend wants in its `settings` message (backend/api/desktop.py apply_settings).
 function toBackend(eff) {
   return {
@@ -168,7 +269,19 @@ function toBackend(eff) {
     screen: eff.screen.looks && eff.screen.trackWindow,   // without window tracking there is nothing to check privacy against, so no looks
     echo_mode: eff.listen.echoMode,
     wake_words: clone(eff.listen.words),
+    mode: eff.chat.mode,
+    nsfw: eff.chat.nsfw,
+    gpu: gpuPolicy(eff),
   }
+}
+
+// The swap policy for the backend arbiter (PUT /api/system/models/policy takes the same object). An empty agentModel is left out so the
+// backend keeps its own default (NOVA_AGENT_MODEL or the 27B tag).
+function gpuPolicy(eff) {
+  const m = eff.models
+  const out = { agentSwap: m.agentSwap, chatReloadMinutes: m.chatReloadMinutes }
+  if (m.agentModel) out.agentModel = m.agentModel
+  return out
 }
 
 // ── persistence ─────────────────────────────────────────────────────────────────
@@ -202,4 +315,4 @@ function applyAutostart(app, enabled, packaged) {
   return { applied: true }
 }
 
-module.exports = { VERSION, DEFAULTS, DEFAULT_PHRASES, AUTONOMY_MODES, ECHO_MODES, SCOPES, sanitize, applyPatch, envOverrides, effective, toBackend, cleanPhrases, loadFrom, saveTo, applyAutostart }
+module.exports = { VERSION, DEFAULTS, DEFAULT_PHRASES, CHAT_MODES, AUTONOMY_MODES, ECHO_MODES, SCOPES, SPEAK_MODES, cleanClock, sanitize, applyPatch, envOverrides, effective, toBackend, gpuPolicy, AGENT_SWAPS, backendHttpUrl, backendWsUrl, cleanPhrases, loadFrom, saveTo, applyAutostart }

@@ -43,10 +43,14 @@ function build() {
       } else if (field.type === 'range') {
         input = el('input', { type: 'range', id, min: field.min, max: field.max, step: field.step })
         const out = el('output', { htmlFor: id })
-        input.addEventListener('input', () => { out.textContent = Number(input.value).toFixed(2) + 'x' })
+        input.addEventListener('input', () => { out.textContent = Number(input.value).toFixed(field.decimals ?? 2) + (field.unit ?? 'x') })
         input.addEventListener('change', () => commit(field.path, Number(input.value)))
         row.append(el('span', { className: 'speed' }, input, out))
         input.out = out
+      } else if (field.type === 'text') {
+        input = el('input', { type: 'text', id, placeholder: field.placeholder || '', spellcheck: false })
+        input.addEventListener('change', () => commit(field.path, input.value))
+        row.append(input)
       } else if (field.type === 'words') {
         input = el('input', { type: 'text', id })
         input.addEventListener('change', () => commit(field.path, parseWords(input.value)))
@@ -68,8 +72,9 @@ function draw() {
     const v = getPath(eff, path)
     const { field, input, hint } = c
     if (field.type === 'bool') input.checked = !!v
-    else if (field.type === 'range') { input.value = v; input.out.textContent = Number(v).toFixed(2) + 'x' }
+    else if (field.type === 'range') { input.value = v; input.out.textContent = Number(v).toFixed(field.decimals ?? 2) + (field.unit ?? 'x') }
     else if (field.type === 'words') input.value = formatWords(v)
+    else if (field.type === 'text') input.value = v == null ? '' : String(v)
     else if (field.type === 'mic') fillMics(input, v)
     else {
       if (!input.options.length) for (const [val, text] of field.options) input.append(el('option', { value: val, textContent: text }))

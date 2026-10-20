@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld('nova', {
   onSettingsChanged: (cb) => ipcRenderer.on('settings-changed', () => cb()),
   openSettings: () => ipcRenderer.send('open-settings'),
   netStatus: (info) => ipcRenderer.send('net-status', info),
+  backendVersion: (v) => ipcRenderer.send('backend-version', v),
   onRetry: (cb) => ipcRenderer.on('retry-connect', () => cb()),
   onOpenInput: (cb) => ipcRenderer.on('open-input', () => cb()),
+  // notification centre (P8)
+  notesState: (list) => ipcRenderer.send('notes-state', list),
+  onNotesClear: (cb) => ipcRenderer.on('notes-clear', () => cb()),
+  foregroundState: () => ipcRenderer.invoke('foreground-state'),
 })

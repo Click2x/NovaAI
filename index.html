@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <title>Nova</title>
     <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' nova-asset: blob: data: ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: nova-asset:" />
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' nova-asset: blob: data: ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: nova-asset: http://localhost:* http://127.0.0.1:*; media-src http://localhost:* http://127.0.0.1:*" />
     <style>
       html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
       canvas { display: block; width: 100vw; height: 100vh; }
@@ -38,6 +38,56 @@
         border: 1px solid rgba(167, 139, 250, .6); animation: chip-pulse 1.2s ease-in-out infinite; }
       @keyframes chip-pulse { 50% { opacity: .65; } }
 
+      /* Phase 7 surfaces. Elements with class "hot" take the mouse while the cursor is over them (see overHot in main.js); the rest of the window stays click-through. */
+      #heard { position: fixed; right: 30px; top: 8px; max-width: 70%; padding: 3px 10px; border-radius: 999px; font-size: 12px; color: #d1fae5;
+        background: rgba(6, 78, 59, .9); border: 1px solid rgba(52, 211, 153, .6); opacity: 0; transition: opacity .15s; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #heard.show { opacity: 1; }
+      #media { position: fixed; left: 12px; right: 12px; top: 34px; max-height: 46%; display: none; flex-direction: column; gap: 4px; padding: 8px;
+        border-radius: 14px; color: #f5f3ff; background: rgba(30, 27, 46, .95); border: 1px solid rgba(167, 139, 250, .5); box-shadow: 0 4px 18px rgba(0,0,0,.4); }
+      #media.show { display: flex; }
+      #media .mbody { min-height: 0; display: flex; justify-content: center; }
+      #media img, #media video { max-width: 100%; max-height: 260px; border-radius: 10px; object-fit: contain; }
+      #media .mcap { font-size: 12px; color: #c4b5fd; text-align: center; }
+      #media .mwait { padding: 40px 0; color: #c4b5fd; animation: chip-pulse 1.2s ease-in-out infinite; }
+      .mclose { position: absolute; right: 6px; top: 4px; width: 22px; height: 22px; line-height: 18px; padding: 0; border-radius: 50%; border: 0; cursor: pointer;
+        color: #f5f3ff; background: rgba(76, 29, 149, .85); font-size: 16px; }
+      #actions { position: fixed; right: 14px; bottom: 112px; display: none; }
+      #actions.show { display: block; }
+      .rate { display: flex; gap: 4px; }
+      .rb { border: 1px solid rgba(167, 139, 250, .5); background: rgba(30, 27, 46, .92); color: #f5f3ff; border-radius: 999px; padding: 2px 8px; cursor: pointer; font-size: 13px; }
+      .rb:hover:not(:disabled) { background: rgba(76, 29, 149, .9); }
+      .rb.on { background: rgba(124, 58, 237, .9); border-color: #c4b5fd; }
+      .rb:disabled { cursor: default; opacity: .6; }
+      .rb.on:disabled { opacity: 1; }
+      #histbtn { position: fixed; left: 12px; top: 6px; padding: 2px 8px; font-size: 12px; opacity: .35; transition: opacity .15s; }
+      #histbtn:hover, #histbtn.open { opacity: 1; }
+      #drawer { position: fixed; left: 12px; right: 12px; top: 56px; bottom: 12px; display: none; flex-direction: column; border-radius: 14px; overflow: hidden;
+        color: #f5f3ff; background: rgba(24, 21, 38, .97); border: 1px solid rgba(167, 139, 250, .5); box-shadow: 0 6px 24px rgba(0,0,0,.5); user-select: text; }
+      #drawer.show { display: flex; }
+      #drawer .dhead { padding: 8px 12px; font-weight: 600; border-bottom: 1px solid rgba(167, 139, 250, .25); }
+      #drawer .dlist { flex: 1; overflow-y: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+      #drawer .dmore { margin: 6px auto 0; display: none; border: 1px solid rgba(167, 139, 250, .5); background: transparent; color: #c4b5fd; border-radius: 999px; padding: 3px 12px; cursor: pointer; }
+      .drow { max-width: 92%; padding: 6px 10px; border-radius: 12px; background: rgba(55, 48, 85, .8); }
+      .drow.u { align-self: flex-end; background: rgba(91, 33, 182, .6); }
+      .dmeta { font-size: 10px; color: #a5a0c4; margin-bottom: 2px; }
+      .dtext { white-space: pre-wrap; word-break: break-word; }
+      .dimg { display: block; max-width: 100%; max-height: 180px; border-radius: 8px; margin-bottom: 4px; }
+      .drow .rate { margin-top: 4px; }
+      /* Phase 8 notification centre: cards top right (newest last), a bell with the count when anything is waiting. Takes the mouse only over a card or the bell. */
+      #notes { position: fixed; right: 12px; top: 30px; width: 262px; display: none; flex-direction: column; align-items: flex-end; gap: 6px; }
+      #notes.show { display: flex; }
+      #notes .notelist { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+      .note { position: relative; padding: 8px 28px 8px 10px; border-radius: 12px; color: #f5f3ff; background: rgba(30, 27, 46, .96);
+        border: 1px solid rgba(167, 139, 250, .55); box-shadow: 0 4px 16px rgba(0,0,0,.4); user-select: text; }
+      .note.confirm { border-color: #fbbf24; }
+      .note.alert { border-color: #f87171; }
+      .note .ntitle { font-weight: 600; font-size: 13px; }
+      .note .nbody { margin-top: 3px; font-size: 12px; color: #ddd6fe; max-height: 96px; overflow: hidden; word-break: break-word; }
+      .note .nstatus { margin-top: 4px; font-size: 12px; color: #86efac; }
+      .note .nacts { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+      .note .mclose { right: 4px; top: 4px; }
+      #notes .bell { display: none; }
+      #notes .bell.show { display: inline-block; }
       #inputbox { position: fixed; left: 12px; right: 12px; bottom: 12px; display: none; }
       #inputbox.show { display: block; }
       #inputbox input { box-sizing: border-box; width: 100%; padding: 10px 14px; border-radius: 14px; outline: none;
@@ -50,6 +100,12 @@
     <div id="chips"></div>
     <div id="inputbox"><input id="field" type="text" placeholder="Say something to Nova..." autocomplete="off" /></div>
     <div id="mic" title="Microphone is open"></div>
+    <div id="heard"></div>
+    <div id="media" class="hot"></div>
+    <div id="actions" class="hot"></div>
+    <div id="notes" class="hot"></div>
+    <button id="histbtn" class="rb hot" title="Show the conversation history">History</button>
+    <div id="drawer" class="hot"></div>
     <div id="status"></div>
     <div id="latency"></div>
     <script type="module" src="/src/main.js"></script>

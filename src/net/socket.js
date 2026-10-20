@@ -93,6 +93,9 @@ export function createSocket({ url, onEvent, onStatus, onAudio, onOpen }) {
     interrupt(turn_id) { send({ type: 'interrupt', turn_id }) },
     playback(p) { send({ type: 'playback', ...p }) },
     settings(s) { send({ type: 'settings', ...s }) },
+    history(before_id, limit = 30) { return send({ type: 'history', before_id, limit }) },
+    feedback(message_id, rating, notes) { return send({ type: 'feedback', message_id, rating, notes }) },
+    react(message_id, emoji) { return send({ type: 'react', message_id, emoji }) },
     close() { closed = true; clearTimeout(timer); if (ws) ws.close() },
   }
 }

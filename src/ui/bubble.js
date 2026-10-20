@@ -22,6 +22,12 @@ export function createBubble(el) {
       sentences.push(text)
       render()
     },
+    // Replaces everything shown (used by the playback pacer, which decides how much of the reply is visible); empty hides the bubble.
+    setText(text) {
+      clearTimeout(timer)
+      sentences = text ? [text] : []
+      render()
+    },
     // Shows a complete message (proactive or error) and schedules its fade.
     say(text, lingerMs = LINGER_MS) {
       clearTimeout(timer)
