@@ -4,7 +4,7 @@
 // and forwarded mouse-moves are unreliable on Windows. So the main process polls the global cursor,
 // sends it (window-relative) to the renderer, and the renderer reads the alpha of the pixel under
 // the cursor and answers with set-interactive. The window ignores the mouse except over the avatar.
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, protocol, net, nativeImage, powerMonitor, session, desktopCapturer, shell } = require('electron')
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, protocol, net, nativeImage, powerMonitor, session, desktopCapturer, shell } = require('electron')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const fs = require('fs')
@@ -196,7 +196,7 @@ registerTraySection(SECTION.VOICE, (ctx) => [
 registerTraySection(SECTION.SCREEN, (ctx) => [
   { label: 'Screen looks', type: 'checkbox', checked: ctx.settings.screen.looks, enabled: !ctx.locked.includes('screen.looks'), click: (i) => updateSettings({ screen: { looks: i.checked } }) },
 ])
-registerTraySection(SECTION.CODE, () => [{ label: 'Code (placeholder)...', click: openCodeWindow }])
+registerTraySection(SECTION.CODE, () => [{ label: 'Code...', click: () => openCodeWindow() }])
 registerTraySection(SECTION.DEBUG, () => [{ label: 'Debug overlay (Ctrl+Alt+D)', type: 'checkbox', checked: debug, click: (i) => setDebug(i.checked) }])
 
 // ── Nova Home (the React web app in a framed window) and backend lifecycle ──
@@ -303,22 +303,16 @@ function solidPng(w, h, rgba) {
   ])
 }
 
-// Regular framed window for the coding agent. Placeholder page for now.
-let codeWin = null
-function openCodeWindow() {
-  if (codeWin) { codeWin.show(); codeWin.focus(); return }
-  codeWin = new BrowserWindow({
-    width: 720,
-    height: 640,
-    title: 'Nova - Code',
-    backgroundColor: '#1f2937',
-    autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
-  })
-  if (DEV) codeWin.loadURL('http://localhost:5174/code.html')
-  else codeWin.loadFile(path.join(__dirname, '..', 'dist', 'code.html'))
-  codeWin.on('closed', () => { codeWin = null })
-}
+// P13 Code window: the desktop client of the backend agent (electron/code.js; the page is src/code/).
+const codeWindow = require('./code').registerCode({
+  ipcMain, BrowserWindow, dialog, DEV,
+  getBase: () => settingsLib.backendHttpUrl(eff(), process.env),
+  getEff: eff,
+  saveWorkspace: (folder) => updateSettings({ agent: { workspace: folder } }),
+  distDir: path.join(__dirname, '..', 'dist'),
+  preload: path.join(__dirname, 'code-preload.js'),
+})
+const openCodeWindow = () => codeWindow.open()
 
 function toggleVisible() {
   if (!win) return
@@ -357,6 +351,7 @@ app.whenReady().then(() => {
   for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, replaceWindow)
   if (process.env.NOVA_OPEN_SETTINGS || process.env.NOVA_SMOKE_SETTINGS) smokeSettings()
   if (process.env.NOVA_SMOKE_HOME) smokeHome()
+  if (process.env.NOVA_SMOKE_CODE) openCodeWindow()        // test hook: open the Code window, capture it after NOVA_SMOKE_CODE_DELAY ms (code.js)
 
   globalShortcut.register('Control+Alt+Space', openInput)
   globalShortcut.register('Control+Alt+N', toggleVisible)

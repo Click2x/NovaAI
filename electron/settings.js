@@ -16,7 +16,8 @@ const DEFAULTS = Object.freeze({
   listen: { micOn: true, micDeviceId: '', echoMode: 'speakers', words: DEFAULT_PHRASES },
   screen: { looks: true, scope: 'window', trackWindow: true },
   chat: { mode: 'companion', nsfw: false },   // persona mode and NSFW for chat from the overlay; NSFW stays off until the user turns it on (roadmap D4)
-  autonomy: { mode: 'ask' },        // placeholder: stored for the agent phase, nothing reads it yet
+  autonomy: { mode: 'ask' },        // legacy (phase 1 placeholder): only read once, to seed agent.defaultMode when no `agent` section was saved yet
+  agent: { defaultMode: 'default', workspace: '' },   // P13 Code window: permission mode a new session starts in, and the folder it works in (also sent to the backend's ~/.nova/settings.json). bypass is never offered here: it needs bypassAllowed in that user file (roadmap D5)
   app: { autostart: false, updateFolder: '' },   // updateFolder: where newer 'Nova Setup x.y.z.exe' files are looked for (updates.js); empty = off
   home: { url: 'auto' },            // 'auto' = <backend.url>/app/ when it answers, else the Vite dev server (see home.js); or any http(s) URL
   backend: { url: 'http://127.0.0.1:8000', startScript: 'C:\\scripts\\start_nova.ps1', controlUrl: 'http://127.0.0.1:8765' },
@@ -26,6 +27,8 @@ const DEFAULTS = Object.freeze({
 })
 
 const AUTONOMY_MODES = ['ask', 'plan', 'auto']
+const AGENT_MODES = ['default', 'acceptEdits', 'plan']
+const AUTONOMY_TO_AGENT = { ask: 'default', plan: 'plan', auto: 'acceptEdits' }   // the old three-way setting -> agent.defaultMode
 const AGENT_SWAPS = ['always', 'never']
 const CHAT_MODES = ['companion', 'friend', 'assistant', 'buddy']   // same as backend/api/desktop.py CHAT_MODES
 const ECHO_MODES = ['speakers', 'headphones']
@@ -136,6 +139,7 @@ function sanitizeRaw(input, base) {
   const words = isObj(listen.words) ? listen.words : {}
   const screen = isObj(src.screen) ? src.screen : {}
   const autonomy = isObj(src.autonomy) ? src.autonomy : {}
+  const agent = isObj(src.agent) ? src.agent : {}
   const chat = isObj(src.chat) ? src.chat : {}
   const app = isObj(src.app) ? src.app : {}
   const home = isObj(src.home) ? src.home : {}
@@ -165,6 +169,11 @@ function sanitizeRaw(input, base) {
     },
     chat: { mode: oneOf(chat.mode, CHAT_MODES, b.chat.mode), nsfw: bool(chat.nsfw, b.chat.nsfw) },
     autonomy: { mode: oneOf(autonomy.mode, AUTONOMY_MODES, b.autonomy.mode) },
+    agent: {
+      // a file saved before P13 has no `agent` section: its autonomy.mode seeds the default mode once
+      defaultMode: oneOf(agent.defaultMode, AGENT_MODES, !isObj(src.agent) && AUTONOMY_TO_AGENT[autonomy.mode] ? AUTONOMY_TO_AGENT[autonomy.mode] : b.agent.defaultMode),
+      workspace: cleanFolder(agent.workspace, b.agent.workspace),
+    },
     app: { autostart: bool(app.autostart, b.app.autostart), updateFolder: cleanFolder(app.updateFolder, b.app.updateFolder) },
     home: { url: cleanHomeUrl(home.url, b.home.url) },
     backend: {
@@ -315,4 +324,4 @@ function applyAutostart(app, enabled, packaged) {
   return { applied: true }
 }
 
-module.exports = { VERSION, DEFAULTS, DEFAULT_PHRASES, CHAT_MODES, AUTONOMY_MODES, ECHO_MODES, SCOPES, SPEAK_MODES, cleanClock, sanitize, applyPatch, envOverrides, effective, toBackend, gpuPolicy, AGENT_SWAPS, backendHttpUrl, backendWsUrl, cleanPhrases, loadFrom, saveTo, applyAutostart }
+module.exports = { VERSION, DEFAULTS, DEFAULT_PHRASES, CHAT_MODES, AUTONOMY_MODES, AGENT_MODES, ECHO_MODES, SCOPES, SPEAK_MODES, cleanClock, sanitize, applyPatch, envOverrides, effective, toBackend, gpuPolicy, AGENT_SWAPS, backendHttpUrl, backendWsUrl, cleanPhrases, loadFrom, saveTo, applyAutostart }

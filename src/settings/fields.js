@@ -40,9 +40,11 @@ export const SECTIONS = [
     { path: 'proactive.quietStart', type: 'text', label: 'Quiet from', placeholder: '22:00', hint: '24-hour time, HH:MM.' },
     { path: 'proactive.quietEnd', type: 'text', label: 'Quiet until', placeholder: '08:00', hint: '24-hour time, HH:MM. A start later than the end wraps past midnight.' },
   ] },
-  { title: 'Autonomy', fields: [
-    { path: 'autonomy.mode', type: 'select', label: 'When she acts on her own', options: [['ask', 'Ask before acting'], ['plan', 'Plan first, then ask'], ['auto', 'Act without asking']],
-      hint: 'Placeholder: saved for the agent phase, nothing uses it yet.' },
+  { title: 'Code agent', fields: [
+    { path: 'agent.defaultMode', type: 'select', label: 'New sessions start in', options: [['default', 'Ask before changes'], ['acceptEdits', 'Accept edits (still asks for shell commands)'], ['plan', 'Plan first, then ask']],
+      hint: 'The permission mode of a new Code session; you can change it per session in the Code window. Bypass is not offered here: it needs "bypassAllowed" in ~/.nova/settings.json.' },
+    { path: 'agent.workspace', type: 'text', label: 'Workspace folder', placeholder: 'chosen in the Code window',
+      hint: 'The only folder (and its subfolders) the agent can read and write. Best set with the folder button in the Code window, which also tells the backend.' },
   ] },
   { title: 'Models', fields: [
     { path: 'models.agentSwap', type: 'select', label: 'Agent tasks use the big model', options: [['always', 'Always swap to it'], ['never', 'Never swap (use the chat model)']],
