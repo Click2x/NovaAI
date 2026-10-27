@@ -88,6 +88,12 @@
       .note .mclose { right: 4px; top: 4px; }
       #notes .bell { display: none; }
       #notes .bell.show { display: inline-block; }
+      /* Radial menu (right-click on her): a ring of round buttons. The container is click-through; only the buttons take the mouse. */
+      #radial { position: fixed; inset: 0; display: none; }
+      #radial.show { display: block; }   /* while open the whole window takes the mouse so a click anywhere else closes it */
+      #radial .rbtn { position: absolute; width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; font-size: 19px; line-height: 1;
+        border: 1px solid rgba(167, 139, 250, .7); background: rgba(30, 27, 46, .95); color: #f5f3ff; box-shadow: 0 3px 12px rgba(0,0,0,.45); pointer-events: auto; }
+      #radial .rbtn:hover { background: rgba(91, 33, 182, .95); }
       #inputbox { position: fixed; left: 12px; right: 12px; bottom: 12px; display: none; }
       #inputbox.show { display: block; }
       #inputbox input { box-sizing: border-box; width: 100%; padding: 10px 14px; border-radius: 14px; outline: none;
@@ -106,6 +112,7 @@
     <div id="notes" class="hot"></div>
     <button id="histbtn" class="rb hot" title="Show the conversation history">History</button>
     <div id="drawer" class="hot"></div>
+    <div id="radial" class="hot"></div>
     <div id="status"></div>
     <div id="latency"></div>
     <script type="module" src="/src/main.js"></script>

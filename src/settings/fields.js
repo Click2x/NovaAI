@@ -28,6 +28,12 @@ export const SECTIONS = [
       hint: 'Whole screen also shows other windows that are open next to the active one.' },
     { path: 'screen.trackWindow', type: 'bool', label: 'Track the active window', hint: 'Local only. Needed to tell which window is private; off also disables screen looks.' },
   ] },
+  { title: 'Display', fields: [
+    { path: 'display.avatar', type: 'bool', label: 'Show the avatar', hint: 'Off hides the overlay completely; Nova keeps running (voice, tray, notifications). Bring it back with Ctrl+Alt+N or the tray.' },
+    { path: 'display.chat', type: 'bool', label: 'Chat window beside her', hint: 'A small chat window that opens next to the avatar and moves with her (Ctrl+Alt+C). It works with the avatar hidden too.' },
+    { path: 'display.chatSide', type: 'select', label: 'Chat window side', options: [['auto', 'Automatic'], ['left', 'Left of her'], ['right', 'Right of her']],
+      hint: 'Both are placed from one saved position; drag either and the other follows.' },
+  ] },
   { title: 'Chat', fields: [
     { path: 'chat.mode', type: 'select', label: 'Chat mode', options: [['companion', 'Companion'], ['friend', 'Friend'], ['assistant', 'Assistant'], ['buddy', 'Buddy']],
       hint: 'The persona she uses for chat from the overlay (same modes as the web app).' },

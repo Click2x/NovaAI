@@ -94,6 +94,9 @@ function onSettingsChanged(before, now) {
     if (now.screen.trackWindow) startWindowTracking()
     else stopWindowTracking()
   }
+  if (before.display.avatar !== now.display.avatar) applyAvatarVisible(now.display.avatar)
+  if (before.display.chat !== now.display.chat) { if (now.display.chat) chatWindow.open(); else chatWindow.close() }
+  if (before.display.chatSide !== now.display.chatSide) chatWindow.follow()
   buildTrayMenu()
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && w.webContents) w.webContents.send('settings-changed')
 }
@@ -124,7 +127,7 @@ function createWindow() {
   if (DEV) win.loadURL('http://localhost:5174')
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
 
-  win.once('ready-to-show', () => win.showInactive())
+  win.once('ready-to-show', () => { if (eff().display.avatar) win.showInactive() })   // display.avatar off: the overlay exists but stays hidden
   win.webContents.on('console-message', (_e, level, msg) => { if (level >= 2) console.log('[renderer]', msg) })
 
   // NOVA_SMOKE=<png path>: wait for the avatar to render, save a capture of the window, then quit.
@@ -142,12 +145,15 @@ function createWindow() {
 
 function startCursorPolling() {
   pollTimer = setInterval(() => {
-    if (!win || !win.isVisible()) return
+    if (!win) return
     const c = screen.getCursorScreenPoint()
     if (drag) {
-      // setBounds with the fixed size: setPosition alone can resize a transparent window when it crosses to a display with another scale factor
+      // setBounds with the fixed size: setPosition alone can resize a transparent window when it crosses to a display with another scale factor.
+      // The avatar window is the origin for both windows (also while it is hidden, when the drag comes from the chat window's header).
       win.setBounds({ x: drag.origin.x + (c.x - drag.cursor.x), y: drag.origin.y + (c.y - drag.cursor.y), width: WIN_W, height: drag.height })
+      chatWindow.follow()
     }
+    if (!win.isVisible()) return
     const b = win.getBounds()
     win.webContents.send('cursor', { x: c.x - b.x, y: c.y - b.y, w: b.width, h: b.height })
   }, POLL_MS)
@@ -182,7 +188,8 @@ function buildTrayMenu() {
 }
 
 registerTraySection(SECTION.NOVA, (ctx) => [
-  { label: ctx.visible ? 'Hide Nova' : 'Show Nova', click: () => { toggleVisible(); buildTrayMenu() } },
+  { label: ctx.visible ? 'Hide avatar (Ctrl+Alt+N)' : 'Show avatar (Ctrl+Alt+N)', click: () => { toggleVisible(); buildTrayMenu() } },
+  { label: 'Chat window (Ctrl+Alt+C)', type: 'checkbox', checked: chatWindow.isOpen(), click: () => toggleChat() },
   { label: netLabel(), enabled: ctx.net.status !== 'online', click: () => { if (win) win.webContents.send('retry-connect') } },
 ])
 registerTraySection(SECTION.NOVA + 1, () => [
@@ -314,11 +321,46 @@ const codeWindow = require('./code').registerCode({
 })
 const openCodeWindow = () => codeWindow.open()
 
-function toggleVisible() {
-  if (!win) return
-  if (win.isVisible()) win.hide()
-  else win.showInactive()
+// Chat window beside the avatar. It has no position of its own: both windows are placed from the avatar window's bounds (placement.js).
+const originBounds = () => (win && !win.isDestroyed() ? win.getBounds() : placement.resolve(screen.getAllDisplays(), screen.getPrimaryDisplay(), stored.placement, { width: WIN_W, height: WIN_H }).bounds)
+const chatWindow = require('./chat').registerChat({
+  ipcMain, BrowserWindow, screen, DEV, placement,
+  getWsUrl: () => settingsLib.backendWsUrl(eff(), process.env),
+  getBackendSettings: () => settingsLib.toBackend(eff()),
+  getOrigin: originBounds,
+  getSide: () => eff().display.chatSide,
+  isAvatarVisible: () => !!(win && win.isVisible()),
+  onClosedByUser: () => { updateSettings({ display: { chat: false } }) },
+  distDir: path.join(__dirname, '..', 'dist'),
+  preload: path.join(__dirname, 'chat-preload.js'),
+})
+function toggleChat() {
+  // Go by the window that actually exists (it may have been closed from outside), and keep the saved choice in step.
+  if (chatWindow.isOpen()) { chatWindow.close(); updateSettings({ display: { chat: false } }) }
+  else { chatWindow.open(); updateSettings({ display: { chat: true } }) }
+  buildTrayMenu()
 }
+
+// display.avatar is the user's choice, saved; hiding keeps Nova running (voice, tray, notifications, the chat window).
+function toggleVisible() { updateSettings({ display: { avatar: !eff().display.avatar } }) }
+function applyAvatarVisible(visible) {
+  if (!win) return
+  if (visible) { if (!win.isVisible()) win.showInactive() } else win.hide()
+  chatWindow.avatarVisible(visible)
+  buildTrayMenu()
+}
+
+// Radial menu (overlay) and the chat window's own button.
+ipcMain.on('radial-action', (_e, id) => {
+  switch (id) {
+    case 'chat': toggleChat(); break
+    case 'home': openHome(); break
+    case 'code': openCodeWindow(); break
+    case 'settings': openSettingsWindow(); break
+    case 'hide': case 'hide-toggle': toggleVisible(); break
+    default: break
+  }
+})
 
 function setDebug(on) {
   debug = on
@@ -344,6 +386,7 @@ app.whenReady().then(() => {
   if (app.isPackaged && initial.app.autostart !== (settingsView().meta.loginItem === true)) settingsLib.applyAutostart(app, initial.app.autostart, true)
   createWindow()
   createTray()
+  if (initial.display.chat) chatWindow.open()
   healthPoller.start()
   gpuTray.start()
   startCursorPolling()
@@ -355,6 +398,7 @@ app.whenReady().then(() => {
 
   globalShortcut.register('Control+Alt+Space', openInput)
   globalShortcut.register('Control+Alt+N', toggleVisible)
+  globalShortcut.register('Control+Alt+C', toggleChat)
   globalShortcut.register('Control+Alt+D', () => setDebug(!debug))
   globalShortcut.register('Control+Alt+H', () => openHome())
   globalShortcut.register('Control+Alt+S', () => { if (win) win.webContents.send('interrupt') })   // stop talking
@@ -369,7 +413,10 @@ ipcMain.on('set-interactive', (_e, on) => {
 // The overlay never takes focus on its own; typing is the one case where it must.
 function openInput() {
   if (!win) return
-  if (!win.isVisible()) win.showInactive()
+  if (!win.isVisible()) {            // avatar hidden by choice: typing happens in the chat window instead of bringing her back
+    if (!eff().display.avatar) { chatWindow.open(); return }
+    win.showInactive()
+  }
   win.focus()
   win.webContents.send('open-input')
 }
@@ -556,6 +603,7 @@ function replaceWindow() {
   if (!win || drag) return
   const { bounds, display } = placement.resolve(screen.getAllDisplays(), screen.getPrimaryDisplay(), stored.placement, { width: WIN_W, height: WIN_H })
   win.setBounds(bounds)
+  chatWindow.follow()
   smokeLogLine(`placed on display ${display.id} at ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height} (scale ${display.scaleFactor})`)
 }
 

@@ -43,7 +43,7 @@ export default defineConfig({
     outDir: 'dist',
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
-      input: { index: resolve(__dirname, 'index.html'), code: resolve(__dirname, 'code.html'), settings: resolve(__dirname, 'settings.html') },
+      input: { index: resolve(__dirname, 'index.html'), code: resolve(__dirname, 'code.html'), chat: resolve(__dirname, 'chat.html'), settings: resolve(__dirname, 'settings.html') },
     },
   },
 })

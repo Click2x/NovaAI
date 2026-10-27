@@ -23,7 +23,8 @@ const DEFAULTS = Object.freeze({
   backend: { url: 'http://127.0.0.1:8000', startScript: 'C:\\scripts\\start_nova.ps1', controlUrl: 'http://127.0.0.1:8765' },
   models: { agentSwap: 'always', agentModel: '', chatReloadMinutes: 5 },   // GPU swap policy (roadmap D10), applied by the backend arbiter; agentModel '' = the backend's default
   proactive: { speak: 'off', quietEnabled: false, quietStart: '22:00', quietEnd: '08:00' },   // P8 (roadmap D12): say her own messages aloud? off by default; quiet hours silence and hide pop-ups (cards wait in the centre)
-  placement: { lastDisplay: null, byDisplay: {} },   // see placement.js
+  display: { avatar: true, chat: false, chatSide: 'auto' },   // avatar: show the overlay at all (off = Nova keeps running, tray/hotkeys/chat window still work); chat: the chat window by her; chatSide: which side of the shared origin it opens on
+  placement: { lastDisplay: null, byDisplay: {} },   // see placement.js: the ONE origin both the avatar and the chat window are placed from
 })
 
 const AUTONOMY_MODES = ['ask', 'plan', 'auto']
@@ -34,6 +35,7 @@ const CHAT_MODES = ['companion', 'friend', 'assistant', 'buddy']   // same as ba
 const ECHO_MODES = ['speakers', 'headphones']
 const SPEAK_MODES = ['off', 'when_visible_and_not_fullscreen']
 const SCOPES = ['window', 'screen']
+const CHAT_SIDES = ['auto', 'left', 'right']
 const VOICE_RE = /^[a-z]{2}_[a-z0-9]{2,20}$/        // Kokoro ids: af_heart, bm_george
 const WORD_KINDS = ['wake', 'stop', 'sleep']
 
@@ -146,6 +148,7 @@ function sanitizeRaw(input, base) {
   const backend = isObj(src.backend) ? src.backend : {}
   const models = isObj(src.models) ? src.models : {}
   const proactive = isObj(src.proactive) ? src.proactive : {}
+  const display = isObj(src.display) ? src.display : {}
   const outWords = {}
   for (const k of WORD_KINDS) outWords[k] = cleanPhrases(words[k], b.listen.words[k])
   return {
@@ -191,6 +194,11 @@ function sanitizeRaw(input, base) {
       quietEnabled: bool(proactive.quietEnabled, b.proactive.quietEnabled),
       quietStart: cleanClock(proactive.quietStart, b.proactive.quietStart),
       quietEnd: cleanClock(proactive.quietEnd, b.proactive.quietEnd),
+    },
+    display: {
+      avatar: bool(display.avatar, b.display.avatar),
+      chat: bool(display.chat, b.display.chat),
+      chatSide: oneOf(display.chatSide, CHAT_SIDES, b.display.chatSide),
     },
     placement: cleanPlacement(src.placement, b.placement),
   }
@@ -324,4 +332,4 @@ function applyAutostart(app, enabled, packaged) {
   return { applied: true }
 }
 
-module.exports = { VERSION, DEFAULTS, DEFAULT_PHRASES, CHAT_MODES, AUTONOMY_MODES, AGENT_MODES, ECHO_MODES, SCOPES, SPEAK_MODES, cleanClock, sanitize, applyPatch, envOverrides, effective, toBackend, gpuPolicy, AGENT_SWAPS, backendHttpUrl, backendWsUrl, cleanPhrases, loadFrom, saveTo, applyAutostart }
+module.exports = { VERSION, DEFAULTS, DEFAULT_PHRASES, CHAT_SIDES, CHAT_MODES, AUTONOMY_MODES, AGENT_MODES, ECHO_MODES, SCOPES, SPEAK_MODES, cleanClock, sanitize, applyPatch, envOverrides, effective, toBackend, gpuPolicy, AGENT_SWAPS, backendHttpUrl, backendWsUrl, cleanPhrases, loadFrom, saveTo, applyAutostart }

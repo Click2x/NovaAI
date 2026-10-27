@@ -58,4 +58,29 @@ function remember(displays, placement, bounds) {
   return { lastDisplay: key, byDisplay }
 }
 
-module.exports = { DEFAULT_OFFSET, displayKey, pickDisplay, boundsFor, offsetOf, resolve, remember }
+// ── the chat window: placed from the SAME origin as the avatar ──────────────────────────────────────────────
+// There is one origin: the avatar window's bounds (resolve/remember above). The chat window never stores a position of its own; it is
+// derived from those bounds every time, so dragging either one moves both and a hidden avatar still has a place for the chat to sit.
+// The avatar window is mostly transparent margin, so the chat overlaps it by CHAT_OVERLAP to sit next to the visible avatar.
+const CHAT_SIZE = Object.freeze({ width: 380, height: 520 })
+const CHAT_OVERLAP = 70
+
+// `side`: 'left' | 'right' | 'auto' (left of the avatar, flipped to the right when the left would leave the display).
+// Bottom edges line up; the result is clamped inside the work area of the display that holds the avatar's centre.
+function chatBounds(displays, avatarBounds, size = CHAT_SIZE, side = 'auto') {
+  const centre = { x: avatarBounds.x + Math.floor(avatarBounds.width / 2), y: avatarBounds.y + Math.floor(avatarBounds.height / 2) }
+  const display = pickDisplay(displays, centre)
+  if (!display) return { x: avatarBounds.x, y: avatarBounds.y, width: size.width, height: size.height, side: 'left' }
+  const w = display.workArea
+  const width = Math.min(size.width, w.width)
+  const height = Math.min(size.height, w.height)
+  const leftX = avatarBounds.x - width + CHAT_OVERLAP
+  const rightX = right(avatarBounds) - CHAT_OVERLAP
+  let used = side === 'right' ? 'right' : 'left'
+  if (side === 'auto') used = leftX >= w.x ? 'left' : 'right'
+  const x = Math.min(Math.max(used === 'left' ? leftX : rightX, w.x), right(w) - width)
+  const y = Math.min(Math.max(bottom(avatarBounds) - height, w.y), bottom(w) - height)
+  return { x: Math.round(x), y: Math.round(y), width, height, side: used }
+}
+
+module.exports = { DEFAULT_OFFSET, CHAT_SIZE, CHAT_OVERLAP, displayKey, pickDisplay, boundsFor, offsetOf, resolve, remember, chatBounds }

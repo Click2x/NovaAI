@@ -29,4 +29,6 @@ contextBridge.exposeInMainWorld('nova', {
   notesState: (list) => ipcRenderer.send('notes-state', list),
   onNotesClear: (cb) => ipcRenderer.on('notes-clear', () => cb()),
   foregroundState: () => ipcRenderer.invoke('foreground-state'),
+  // radial menu (display/chat window, main.js handles the ids)
+  radial: (id) => ipcRenderer.send('radial-action', String(id)),
 })

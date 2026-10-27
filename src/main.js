@@ -4,6 +4,7 @@ import { createSocket } from './net/socket.js'
 import { createEvents } from './net/events.js'
 import { createBubble } from './ui/bubble.js'
 import { createInput } from './ui/input.js'
+import { createRadial } from './ui/radial.js'
 import { createLatency } from './ui/latency.js'
 import { createChips } from './ui/chips.js'
 import { createPacer } from './ui/pacing.js'
@@ -379,6 +380,23 @@ async function boot() {
     if (ui.includes('drawer')) setTimeout(() => click('#histbtn', 0), 6000)
   }
 
+  // ── radial menu: right-click on her. "Talk" is handled here; everything else is the main process's (windows, hiding the avatar) ──
+  const radialEl = document.getElementById('radial')
+  const radial = createRadial(radialEl, {
+    onPick: (id) => {
+      smokeLog(`radial ${id}`)
+      if (id === 'talk') input.show()
+      else window.nova.radial(id)
+    },
+  })
+  radialEl.addEventListener('click', () => radial.close())          // a click outside the buttons closes it
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && radial.isOpen()) radial.close() })
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    if (!state.interactive || state.dragging) return
+    radial.open(e.clientX, e.clientY)
+  })
+
   // ── drag by grabbing the avatar; a click without movement opens the input ─
   let downAt = null
   canvas.addEventListener('pointerdown', (e) => {
@@ -425,7 +443,7 @@ async function boot() {
       avatar.lookAtNormalized((c.x / c.w) * 2 - 1, 1 - (c.y / c.h) * 2)
       // Stay interactive while dragging or typing; otherwise only while the cursor is over avatar pixels.
       const over = c.x >= 0 && c.y >= 0 && c.x < c.w && c.y < c.h && avatar.alphaAt(c.x, c.y) >= HIT_ALPHA
-      setInteractive(state.dragging || input.isOpen() || over || overHot(c))
+      setInteractive(state.dragging || input.isOpen() || radial.isOpen() || over || overHot(c))
       statusEl.textContent = `${state.net}  cursor ${Math.round(c.x)},${Math.round(c.y)}  ${state.interactive ? 'AVATAR' : 'click-through'}`
     }
     requestAnimationFrame(frame)
