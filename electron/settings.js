@@ -18,12 +18,13 @@ const DEFAULTS = Object.freeze({
   chat: { mode: 'companion', nsfw: false },   // persona mode and NSFW for chat from the overlay; NSFW stays off until the user turns it on (roadmap D4)
   autonomy: { mode: 'ask' },        // legacy (phase 1 placeholder): only read once, to seed agent.defaultMode when no `agent` section was saved yet
   agent: { defaultMode: 'default', workspace: '' },   // P13 Code window: permission mode a new session starts in, and the folder it works in (also sent to the backend's ~/.nova/settings.json). bypass is never offered here: it needs bypassAllowed in that user file (roadmap D5)
-  app: { autostart: false, updateFolder: '' },   // updateFolder: where newer 'Nova Setup x.y.z.exe' files are looked for (updates.js); empty = off
+  app: { autostart: false, updateFolder: '', onboardingDone: false, onboardingDismissed: false },   // onboarding*: the guided setup finished / was put off with "do this later" (the tray can always reopen it)
+    // updateFolder: where newer 'Nova Setup x.y.z.exe' files are looked for (updates.js); empty = off
   home: { url: 'auto' },            // 'auto' = <backend.url>/app/ when it answers, else the Vite dev server (see home.js); or any http(s) URL
   backend: { url: 'http://127.0.0.1:8000', startScript: '', controlUrl: 'http://127.0.0.1:8765' },
   models: { agentSwap: 'always', agentModel: '', chatReloadMinutes: 5 },   // GPU swap policy (roadmap D10), applied by the backend arbiter; agentModel '' = the backend's default
   proactive: { speak: 'off', quietEnabled: false, quietStart: '22:00', quietEnd: '08:00' },   // P8 (roadmap D12): say her own messages aloud? off by default; quiet hours silence and hide pop-ups (cards wait in the centre)
-  display: { avatar: true, chat: false, chatSide: 'auto' },   // avatar: show the overlay at all (off = Nova keeps running, tray/hotkeys/chat window still work); chat: the chat window by her; chatSide: which side of the shared origin it opens on
+  display: { avatar: true, chat: false, chatSide: 'auto', vrm: '' },   // avatar: show the overlay at all (off = Nova keeps running, tray/hotkeys/chat window still work); chat: the chat window by her; chatSide: which side of the shared origin it opens on
   placement: { lastDisplay: null, byDisplay: {} },   // see placement.js: the ONE origin both the avatar and the chat window are placed from
 })
 
@@ -96,6 +97,14 @@ function cleanFolder(v, fallback) {
   const t = v.trim()
   if (!t) return ''
   return t.length <= 260 && !/[\u0000-\u001f"]/.test(t) ? t : fallback
+}
+
+// Path of a custom avatar: empty (use the bundled one) or one line ending in .vrm. Whether the file is usable is checked when it is loaded.
+function cleanVrm(v, fallback) {
+  if (typeof v !== 'string') return fallback
+  const t = v.trim()
+  if (!t) return ''
+  return t.length <= 260 && /\.vrm$/i.test(t) && !/[\u0000-\u001f"]/.test(t) ? t : fallback
 }
 
 // An Ollama model tag: one line, no spaces or quotes. Empty means "the backend's default".
@@ -177,7 +186,8 @@ function sanitizeRaw(input, base) {
       defaultMode: oneOf(agent.defaultMode, AGENT_MODES, !isObj(src.agent) && AUTONOMY_TO_AGENT[autonomy.mode] ? AUTONOMY_TO_AGENT[autonomy.mode] : b.agent.defaultMode),
       workspace: cleanFolder(agent.workspace, b.agent.workspace),
     },
-    app: { autostart: bool(app.autostart, b.app.autostart), updateFolder: cleanFolder(app.updateFolder, b.app.updateFolder) },
+    app: { autostart: bool(app.autostart, b.app.autostart), updateFolder: cleanFolder(app.updateFolder, b.app.updateFolder),
+      onboardingDone: bool(app.onboardingDone, b.app.onboardingDone), onboardingDismissed: bool(app.onboardingDismissed, b.app.onboardingDismissed) },
     home: { url: cleanHomeUrl(home.url, b.home.url) },
     backend: {
       url: cleanHttpUrl(backend.url, b.backend.url),
@@ -199,6 +209,7 @@ function sanitizeRaw(input, base) {
       avatar: bool(display.avatar, b.display.avatar),
       chat: bool(display.chat, b.display.chat),
       chatSide: oneOf(display.chatSide, CHAT_SIDES, b.display.chatSide),
+      vrm: cleanVrm(display.vrm, b.display.vrm),
     },
     placement: cleanPlacement(src.placement, b.placement),
   }

@@ -6,3 +6,4 @@ release-nsis/
 .env
 .env.*
 settings.bad.json
+.agent-board/

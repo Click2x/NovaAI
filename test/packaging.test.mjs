@@ -31,7 +31,7 @@ test('the packaged avatar path in main.js matches extraResources', () => {
 
 test('every page is a build input, and the scripts exist', () => {
   const vite = fs.readFileSync(path.join(root, 'vite.config.js'), 'utf8')
-  for (const page of ['index.html', 'code.html', 'chat.html', 'settings.html']) {
+  for (const page of ['index.html', 'code.html', 'chat.html', 'onboarding.html', 'settings.html']) {
     assert.ok(fs.existsSync(path.join(root, page)), page)
     assert.ok(vite.includes(`'${page}'`), `${page} in vite inputs`)
   }

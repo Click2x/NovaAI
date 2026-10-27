@@ -14,6 +14,10 @@ Nova.Ai is a desktop companion: a VRM avatar that lives on your desktop, talks a
 
 Nova.Ai is a client. It talks to a backend over a local WebSocket (`ws://127.0.0.1:8000`, protocol v1: `/api/desktop/ws`). The backend lives in [`backend/`](backend/README.md) in this repository: a small Python server that uses [Ollama](https://ollama.com) for models, with Mistral NeMo as her voice, a model router for tool calling, a harm filter you can turn off, and a guided, voiced onboarding. Start it with `python -m novaai serve`.
 
+## First run
+
+On a fresh install the app opens a guided, voiced setup (`Set up Nova...` in the tray opens it again): she introduces herself, checks your machine, downloads her models with spoken progress, gets to know you in a real conversation (type, or use the microphone), lets you audition voices, explains the safety filter in plain words, and lets you keep the bundled avatar or choose your own `.vrm` file. If no backend is running yet, the setup window says so and shows how to start it. If speech is not installed on the backend, she uses your computer's voice.
+
 ## Build and run
 
 ```

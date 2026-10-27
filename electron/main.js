@@ -35,6 +35,11 @@ const DEFAULT_VRM = app.isPackaged
   ? path.join(process.resourcesPath, 'vrm', 'Nova_v1_grunge.vrm')
   : path.resolve(__dirname, '..', 'assets', 'vrm', 'Nova_v1_grunge.vrm')
 const VRM_PATH = process.env.NOVA_VRM ? path.resolve(process.env.NOVA_VRM) : DEFAULT_VRM
+// NOVA_VRM (a test/developer override) wins; then the avatar the user chose in setup (display.vrm) if it is still there; then the bundled one.
+function vrmFile() {
+  const custom = eff().display.vrm
+  return !process.env.NOVA_VRM && custom && fs.existsSync(custom) ? custom : VRM_PATH
+}
 
 // Only this one file is ever served through nova-asset://, no path is taken from the URL.
 protocol.registerSchemesAsPrivileged([
@@ -194,6 +199,7 @@ registerTraySection(SECTION.NOVA, (ctx) => [
 ])
 registerTraySection(SECTION.NOVA + 1, () => [
   { label: 'Open Nova Home (Ctrl+Alt+H)', click: () => openHome() },
+  { label: 'Set up Nova...', click: () => setupWindow.open() },
   { label: 'Settings...', click: openSettingsWindow },
   { label: 'Start with Windows', type: 'checkbox', checked: eff().app.autostart, click: (i) => updateSettings({ app: { autostart: i.checked } }) },
 ])
@@ -321,6 +327,18 @@ const codeWindow = require('./code').registerCode({
 })
 const openCodeWindow = () => codeWindow.open()
 
+// Guided setup (electron/onboarding.js; the page is src/onboarding/). Opens by itself on a first run, from the tray any time.
+const setupWindow = require('./onboarding').registerOnboarding({
+  ipcMain, BrowserWindow, dialog, shell, screen, DEV,
+  getBase: () => settingsLib.backendHttpUrl(eff(), process.env),
+  getVrmName: () => path.basename(vrmFile()),
+  setAvatar: (file) => { updateSettings({ display: { vrm: file } }); if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache() },
+  onFinish: () => { updateSettings({ app: { onboardingDone: true, onboardingDismissed: false }, display: { avatar: true } }) },
+  onLater: () => { updateSettings({ app: { onboardingDismissed: true } }) },
+  distDir: path.join(__dirname, '..', 'dist'),
+  preload: path.join(__dirname, 'onboarding-preload.js'),
+})
+
 // Chat window beside the avatar. It has no position of its own: both windows are placed from the avatar window's bounds (placement.js).
 const originBounds = () => (win && !win.isDestroyed() ? win.getBounds() : placement.resolve(screen.getAllDisplays(), screen.getPrimaryDisplay(), stored.placement, { width: WIN_W, height: WIN_H }).bounds)
 const chatWindow = require('./chat').registerChat({
@@ -375,10 +393,11 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler((wc, permission) => permission === 'media' && ownPage(wc ? wc.getURL() : ''))
 
   protocol.handle('nova-asset', (req) => {
-    if (new URL(req.url).hostname !== 'avatar.vrm' || !fs.existsSync(VRM_PATH)) {
+    const file = vrmFile()
+    if (new URL(req.url).hostname !== 'avatar.vrm' || !fs.existsSync(file)) {
       return new Response('not found', { status: 404 })
     }
-    return net.fetch(pathToFileURL(VRM_PATH).toString())
+    return net.fetch(pathToFileURL(file).toString())
   })
 
   loadSettings()
@@ -387,6 +406,15 @@ app.whenReady().then(() => {
   createWindow()
   createTray()
   if (initial.display.chat) chatWindow.open()
+  if (!process.env.NOVA_SMOKE && !process.env.NOVA_SMOKE_HOME && !process.env.NOVA_SMOKE_CODE) {
+    const onboarding = require('./onboarding')
+    onboarding.probeBackend(settingsLib.backendHttpUrl(eff(), process.env)).then((b) => {
+      smokeLogLine(`setup probe reachable=${b.reachable} supported=${b.supported} done=${b.done}`)
+      if (onboarding.shouldAutoOpen(b, eff().app)) setupWindow.open()
+    })
+  }
+  if (process.env.NOVA_OPEN_SETUP || process.env.NOVA_SMOKE_SETUP) setupWindow.open()      // test hooks
+  if (process.env.NOVA_SMOKE_SETUP) smokeSetup()
   healthPoller.start()
   gpuTray.start()
   startCursorPolling()
@@ -556,6 +584,23 @@ function smokeSettings() {
       smokeLogLine('settings panel saved ' + process.env.NOVA_SMOKE_SETTINGS)
     }
   })
+}
+
+// Test hook: NOVA_SMOKE_SETUP=<png> opens the setup window, optionally runs NOVA_SMOKE_SETUP_JS=<file> in the page (its result goes to the smoke log),
+// waits NOVA_SMOKE_SETUP_DELAY ms (default 4000), saves a capture and quits.
+async function smokeSetup() {
+  const w = setupWindow.getWindow()
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+  if (w.webContents.isLoading()) await new Promise((r) => w.webContents.once('did-finish-load', r))
+  await wait(2500)
+  try {
+    if (process.env.NOVA_SMOKE_SETUP_JS) smokeLogLine('setup script: ' + JSON.stringify(await w.webContents.executeJavaScript(fs.readFileSync(process.env.NOVA_SMOKE_SETUP_JS, 'utf8'))))
+  } catch (err) { smokeLogLine('setup script failed: ' + err.message) }
+  await wait(Number(process.env.NOVA_SMOKE_SETUP_DELAY) || 4000)
+  smokeLogLine(`setup window zoom=${w.webContents.getZoomFactor()} bounds=${JSON.stringify(w.getBounds())} content=${JSON.stringify(w.getContentBounds())} dpr=${await w.webContents.executeJavaScript('devicePixelRatio + " inner " + innerWidth + "x" + innerHeight')}`)
+  fs.writeFileSync(process.env.NOVA_SMOKE_SETUP, (await w.webContents.capturePage()).toPNG())
+  smokeLogLine('setup saved ' + process.env.NOVA_SMOKE_SETUP)
+  app.quit()
 }
 
 // Test hook: NOVA_SMOKE_HOME=<png> opens Home on #panel=<NOVA_SMOKE_HOME_PANEL, default memory>, waits, reports what the page sees, saves a capture and quits.

@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Nova - Setup</title>
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' nova-asset: blob: data: http://127.0.0.1:* http://localhost:*; img-src 'self' data: blob:; media-src blob: http://127.0.0.1:* http://localhost:*" />
+    <link rel="stylesheet" href="/src/onboarding/onboarding.css" />
+  </head>
+  <body>
+    <header>
+      <div id="dots" aria-label="Progress"></div>
+      <div class="tools">
+        <button id="mic" class="btn round" hidden aria-label="Microphone">&#127908;</button>
+        <button id="mute" class="btn quiet">Voice on</button>
+        <button id="later" class="btn quiet" title="Close this and set up later from the tray">Do this later</button>
+      </div>
+    </header>
+    <main>
+      <section id="stage">
+        <canvas id="face" hidden></canvas>
+        <div id="orb" hidden></div>
+      </section>
+      <p id="caption" aria-live="polite"></p>
+      <div id="transcript" aria-label="What we have said"></div>
+      <div id="error" role="alert" hidden></div>
+      <section id="panel"></section>
+    </main>
+    <script type="module" src="/src/onboarding/onboarding.js"></script>
+  </body>
+</html>

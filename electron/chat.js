@@ -52,7 +52,7 @@ function registerChat(deps) {
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     if (DEV) win.loadURL('http://localhost:5174/chat.html')
     else win.loadFile(path.join(distDir, 'chat.html'))
-    win.once('ready-to-show', () => { if (alive()) { win.show(); win.focus() } })
+    win.once('ready-to-show', () => { if (alive()) { win.setBounds(boundsNow()); win.show(); win.focus() } })      // bounds again: a window made on a monitor with another scale factor can come up resized
     win.on('closed', () => { win = null })
     return win
   }
