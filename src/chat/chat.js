@@ -60,14 +60,26 @@ async function boot() {
     apply((s) => addUser(s, id, t))
   })
 
-  // The header moves the shared origin (the main process drags the avatar window and this one follows), same as grabbing the avatar.
+  // The header moves this window on its own (the main process keeps the spot as an offset from the avatar, so it still follows her). Locked: it stays.
   const head = $('head')
+  let locked = !!config.locked
+  const paintLock = () => { head.style.cursor = locked ? 'default' : 'grab'; head.title = locked ? 'The layout is locked' : 'Drag to move' }
+  paintLock()
+  window.novaChat.onLocked((v) => { locked = v; paintLock() })
+  let from = null
   head.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || e.target.closest('button')) return
+    if (locked || e.button !== 0 || e.target.closest('button')) return
+    from = { x: e.screenX, y: e.screenY }
     head.setPointerCapture(e.pointerId)
-    window.novaChat.dragStart()
+    window.novaChat.drag('start')
   })
-  const endDrag = (e) => { if (head.hasPointerCapture(e.pointerId)) { head.releasePointerCapture(e.pointerId); window.novaChat.dragEnd() } }
+  head.addEventListener('pointermove', (e) => { if (from) window.novaChat.drag('move', e.screenX - from.x, e.screenY - from.y) })
+  const endDrag = (e) => {
+    if (!from) return
+    window.novaChat.drag('end', e.screenX - from.x, e.screenY - from.y)
+    from = null
+    if (head.hasPointerCapture(e.pointerId)) head.releasePointerCapture(e.pointerId)
+  }
   head.addEventListener('pointerup', endDrag)
   head.addEventListener('pointercancel', endDrag)
 

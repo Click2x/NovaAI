@@ -49,7 +49,7 @@ L: dict[str, list[list[tuple[str, str]]]] = {
     "safety_need_adult": [[("I need you to confirm you're eighteen or older before I can do that. Everything stays on until you do.", "neutral")]],
     "avatar_intro": [[("Last thing: how I'll look on your desktop.", "neutral"),
                       ("I'm a small glowing orb in the corner of your screen, and I pulse when I speak.", "neutral"),
-                      ("If you'd rather have an avatar, you can bring your own. Any VRM file works. The one I ship with is only a placeholder, and it does not reflect the quality of the final result.", "neutral")]],
+                      ("If you'd rather have an avatar, you can bring your own. Any VRM file works.", "neutral")]],
     "done": [[("That's it, {name}. I'm all set.", "happy"),
               ("Say my name any time, or press Control Alt Space to type to me. Everything we talked about today is mine to remember, and you can read, change or delete all of it in settings.", "warm"),
               ("I'm glad to meet you.", "warm")]],

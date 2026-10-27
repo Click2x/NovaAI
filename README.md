@@ -1,11 +1,18 @@
 # Nova.Ai
 
-Nova.Ai is a desktop companion: a VRM avatar that lives on your desktop, talks and listens, can look at your window when you ask, and sits beside a small chat window. This repository is the desktop app only (Electron, plain JavaScript).
+Nova.Ai is a desktop companion: a small glowing orb that lives in the corner of your desktop (or your own VRM avatar), talks and listens, can look at your window when you ask, and sits beside a small chat window. This repository is the desktop app only (Electron, plain JavaScript).
+
+![The guided, voiced setup](docs/screenshots/setup.png)
+
+| The text box sits above the orb | The menu fans around the orb |
+| --- | --- |
+| ![The text box](docs/screenshots/overlay-text-box.png) | ![The radial menu](docs/screenshots/overlay-menu.png) |
 
 ## What it does
 
-- Transparent always-on-top avatar with lip-sync and expressions; click-through except over her. Right-click her for a radial menu.
-- The avatar is optional: hide it (Ctrl+Alt+N, tray, radial menu) and Nova keeps running. A chat window (Ctrl+Alt+C) opens beside her and is placed from the same origin as the avatar, so dragging either moves both.
+- Transparent always-on-top orb (or avatar) that swells with her voice and takes the colour of her mood; click-through except over her. Right-click her for a radial menu.
+- The display is optional: hide it (Ctrl+Alt+N, tray, radial menu) and Nova keeps running. A chat window (Ctrl+Alt+C) opens beside her and is placed from the same origin as the avatar, so dragging either moves both.
+- Everything can be moved and locked: drag the small grip above the speech bubble, the text box and the buttons, the chat window by its title, or the orb itself. Double-click a grip to put that element back. Lock the layout from the radial menu, the tray or Settings > Display and nothing moves; "Reset layout" in the tray puts it all back.
 - Voice in (wake word, push-to-talk style commands) and voice out, speech bubble, history drawer, thumbs and reactions.
 - Notification centre, tray menus, a Home window that hosts the Nova web app, a Code window for the agent, GPU and training status.
 - Settings panel for voice, listening, screen looks, display, chat mode, notifications and the agent.

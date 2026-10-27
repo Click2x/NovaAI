@@ -133,7 +133,6 @@ export function createView(root, A) {
 
   function stepAvatar(s) {
     return h('div', { class: 'card' }, h('h2', { text: 'How I look' }), h('p', { text: 'On your desktop I am a small glowing orb in the corner of your screen. It pulses when I speak. If you would rather have an avatar, you can use your own: any VRM file.' }),
-      h('p', { class: 'note', text: 'The avatar I ship with is only a placeholder. It does not reflect the quality of the final result.' }),
       h('div', { class: 'row' }, button('Use my own avatar...', () => A.pickAvatar(), { disabled: s.busy }), button('Keep the orb', () => A.keepAvatar(), { primary: true, disabled: s.busy })))
   }
 

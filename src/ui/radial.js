@@ -7,6 +7,7 @@ export const RADIAL_ITEMS = [
   { id: 'home', label: 'Home', icon: '\u{1F3E0}' },
   { id: 'code', label: 'Code', icon: '\u{2328}' },
   { id: 'settings', label: 'Settings', icon: '\u{2699}' },
+  { id: 'lock', label: 'Lock or unlock the layout', icon: '\u{1F512}' },
   { id: 'hide', label: 'Hide avatar', icon: '\u{1F648}' },
 ]
 
@@ -27,6 +28,21 @@ export function ringLayout(n, cx, cy, radius, w, h, size = BTN) {
   return { centre: { x: Math.round(ox), y: Math.round(oy) }, radius: r, points: out }
 }
 
+// A fan of `n` buttons around a fixed centre (the orb), on an arc from `fromDeg` to `toDeg` (screen angles: 180 is left, 270 is up). The radius
+// is at least `radius` and grows until neighbours do not touch; every button is kept inside the w x h window. So the menu surrounds the
+// orb instead of covering it.
+export function arcLayout(n, cx, cy, radius, w, h, { fromDeg = 180, toDeg = 300, size = BTN } = {}) {
+  const half = size / 2
+  const span = ((toDeg - fromDeg) * Math.PI) / 180
+  const r = n > 1 ? Math.max(radius, ((n - 1) * (size + 6)) / Math.abs(span)) : radius
+  const points = []
+  for (let i = 0; i < n; i++) {
+    const a = ((fromDeg * Math.PI) / 180) + (n > 1 ? (span * i) / (n - 1) : span / 2)
+    points.push({ x: Math.round(Math.min(Math.max(cx + r * Math.cos(a), half), w - half)), y: Math.round(Math.min(Math.max(cy + r * Math.sin(a), half), h - half)) })
+  }
+  return { centre: { x: Math.round(cx), y: Math.round(cy) }, radius: r, points }
+}
+
 // `root` is the #radial element. onPick(id) is called once with the chosen item and the menu closes. Items can be hidden per state
 // (`items` filter), e.g. "Hide avatar" is always shown, but a caller may drop entries that make no sense.
 export function createRadial(root, { onPick, items = RADIAL_ITEMS, radius = 96 } = {}) {
@@ -38,9 +54,10 @@ export function createRadial(root, { onPick, items = RADIAL_ITEMS, radius = 96 }
   }
   return {
     isOpen: () => open,
-    open(x, y, w = window.innerWidth, h = window.innerHeight) {
+    // `fan` ({ cx, cy, radius }) puts the buttons on an arc around that point (the orb) instead of a ring around the click.
+    open(x, y, w = window.innerWidth, h = window.innerHeight, fan = null) {
       root.textContent = ''
-      const { points } = ringLayout(items.length, x, y, radius, w, h)
+      const { points } = fan ? arcLayout(items.length, fan.cx, fan.cy, fan.radius, w, h) : ringLayout(items.length, x, y, radius, w, h)
       items.forEach((it, i) => {
         const b = document.createElement('button')
         b.className = 'rbtn'

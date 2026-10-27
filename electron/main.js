@@ -101,7 +101,8 @@ function onSettingsChanged(before, now) {
   }
   if (before.display.avatar !== now.display.avatar) applyAvatarVisible(now.display.avatar)
   if (before.display.chat !== now.display.chat) { if (now.display.chat) chatWindow.open(); else chatWindow.close() }
-  if (before.display.chatSide !== now.display.chatSide) chatWindow.follow()
+  if (before.display.chatSide !== now.display.chatSide || JSON.stringify(before.display.layout.chat) !== JSON.stringify(now.display.layout.chat)) chatWindow.follow()
+  if (before.display.layout.locked !== now.display.layout.locked) chatWindow.locked(now.display.layout.locked)
   if (before.display.style !== now.display.style && win && !win.isDestroyed()) win.webContents.reloadIgnoringCache()      // the overlay builds the orb or the avatar once, at load
   buildTrayMenu()
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && w.webContents) w.webContents.send('settings-changed')
@@ -196,6 +197,8 @@ function buildTrayMenu() {
 registerTraySection(SECTION.NOVA, (ctx) => [
   { label: ctx.visible ? 'Hide avatar (Ctrl+Alt+N)' : 'Show avatar (Ctrl+Alt+N)', click: () => { toggleVisible(); buildTrayMenu() } },
   { label: 'Chat window (Ctrl+Alt+C)', type: 'checkbox', checked: chatWindow.isOpen(), click: () => toggleChat() },
+  { label: 'Lock layout', type: 'checkbox', checked: eff().display.layout.locked, click: (i) => updateSettings({ display: { layout: { locked: i.checked } } }) },
+  { label: 'Reset layout', click: () => updateSettings({ display: { layout: { chat: { x: 0, y: 0 }, ui: {} } } }) },
   { label: netLabel(), enabled: ctx.net.status !== 'online', click: () => { if (win) win.webContents.send('retry-connect') } },
 ])
 registerTraySection(SECTION.NOVA + 1, () => [
@@ -348,6 +351,9 @@ const chatWindow = require('./chat').registerChat({
   getBackendSettings: () => settingsLib.toBackend(eff()),
   getOrigin: originBounds,
   getSide: () => eff().display.chatSide,
+  getOffset: () => eff().display.layout.chat,
+  isLocked: () => eff().display.layout.locked,
+  onMoved: (off) => { updateSettings({ display: { layout: { chat: off } } }) },
   isAvatarVisible: () => !!(win && win.isVisible()),
   onClosedByUser: () => { updateSettings({ display: { chat: false } }) },
   distDir: path.join(__dirname, '..', 'dist'),
@@ -383,6 +389,8 @@ ipcMain.on('radial-action', (_e, id) => {
     case 'code': openCodeWindow(); break
     case 'settings': openSettingsWindow(); break
     case 'hide': case 'hide-toggle': toggleVisible(); break
+    case 'lock': updateSettings({ display: { layout: { locked: !eff().display.layout.locked } } }); break
+    case 'reset-layout': updateSettings({ display: { layout: { chat: { x: 0, y: 0 }, ui: {} } } }); break
     default: break
   }
 })
@@ -532,7 +540,7 @@ ipcMain.handle('get-config', () => {
     backend: settingsLib.backendWsUrl(e, process.env),   // NOVA_BACKEND (ws://...) still wins
     smokeUi: process.env.NOVA_SMOKE_UI || '',   // test hook: comma list of rate, react, drawer; the overlay clicks those controls itself
     backendHttp: settingsLib.backendHttpUrl(e, process.env),   // where the overlay loads pictures and video from
-    display: { style: e.display.style, orbPx: orbPx() },       // what she looks like on the desktop and how big the orb is on this screen
+    display: { style: e.display.style, orbPx: orbPx(), layout: e.display.layout },       // what she looks like on the desktop and how big the orb is on this screen
     autoSay: process.env.NOVA_SMOKE_SAY || null, // test hook: send this text once connected
     // Everything below comes from the settings file with env overrides on top (settings.js); the renderer re-reads it on 'settings-changed'.
     backendSettings: settingsLib.toBackend(e),   // the `settings` message for the backend
@@ -637,7 +645,7 @@ ipcMain.on('smoke-log', (_e, line) => {
 })
 
 ipcMain.on('drag-start', () => {
-  if (!win) return
+  if (!win || eff().display.layout.locked) return
   const b = win.getBounds()
   drag = { cursor: screen.getCursorScreenPoint(), origin: { x: b.x, y: b.y }, height: b.height }
 })

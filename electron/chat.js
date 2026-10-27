@@ -6,10 +6,11 @@ const { pathToFileURL } = require('url')
 
 const CONFIG_CHANNEL = 'chat-config'
 const CLOSE_CHANNEL = 'chat-close'
+const DRAG_CHANNEL = 'chat-drag'
 
 // What the page needs. Speech is switched off by the page for its own connection.
-function pageConfig({ wsUrl, backendSettings, avatarVisible }) {
-  return { wsUrl, backendSettings, avatarVisible: !!avatarVisible }
+function pageConfig({ wsUrl, backendSettings, avatarVisible, locked }) {
+  return { wsUrl, backendSettings, avatarVisible: !!avatarVisible, locked: !!locked }
 }
 
 function allowNavigation(url, ownPrefix) {
@@ -17,20 +18,37 @@ function allowNavigation(url, ownPrefix) {
 }
 
 // deps: { ipcMain, BrowserWindow, screen, DEV, placement, getWsUrl, getBackendSettings, getOrigin() -> avatar window bounds,
-//         getSide() -> 'auto'|'left'|'right', isAvatarVisible, onClosedByUser(), distDir, preload }
+//         getSide() -> 'auto'|'left'|'right', isAvatarVisible, onClosedByUser(), distDir, preload,
+//         getOffset() -> {x,y} the user moved the chat window by, isLocked(), onMoved({x,y}) after a drag }
 function registerChat(deps) {
   const { ipcMain, BrowserWindow, screen, DEV, placement, getWsUrl, getBackendSettings, getOrigin, getSide, isAvatarVisible, onClosedByUser, distDir, preload } = deps
+  const getOffset = deps.getOffset || (() => ({ x: 0, y: 0 }))
+  const isLocked = deps.isLocked || (() => false)
+  const onMoved = deps.onMoved || (() => {})
   let win = null
+  let dragFrom = null
 
   const alive = () => !!win && !win.isDestroyed()
-  const boundsNow = () => {
+  // Where the origin puts it, moved by whatever the user dragged it to (so it still follows the avatar), kept on screen.
+  const boundsFor = (off) => {
     const b = placement.chatBounds(screen.getAllDisplays(), getOrigin(), placement.CHAT_SIZE, getSide())
-    return { x: b.x, y: b.y, width: b.width, height: b.height }
+    return placement.shifted(screen.getAllDisplays(), { x: b.x, y: b.y, width: b.width, height: b.height }, off)
   }
+  const boundsNow = () => { const s = boundsFor(getOffset()); return { x: s.x, y: s.y, width: s.width, height: s.height } }
 
   ipcMain.handle(CONFIG_CHANNEL, (e) => {
     if (!alive() || e.sender !== win.webContents) return null
-    return pageConfig({ wsUrl: getWsUrl(), backendSettings: getBackendSettings(), avatarVisible: isAvatarVisible() })
+    return pageConfig({ wsUrl: getWsUrl(), backendSettings: getBackendSettings(), avatarVisible: isAvatarVisible(), locked: isLocked() })
+  })
+  // The header moves only this window: ('start') remember where it was, ('move', dx, dy) follow the pointer, ('end', dx, dy) save the spot.
+  ipcMain.on(DRAG_CHANNEL, (e, phase, dx, dy) => {
+    if (!alive() || e.sender !== win.webContents || isLocked()) return
+    if (phase === 'start') { dragFrom = { ...getOffset() }; return }
+    if (!dragFrom) return
+    const n = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+    const s = boundsFor({ x: dragFrom.x + n(dx), y: dragFrom.y + n(dy) })
+    win.setBounds({ x: s.x, y: s.y, width: s.width, height: s.height })
+    if (phase === 'end') { dragFrom = null; onMoved(s.offset) }
   })
   ipcMain.on(CLOSE_CHANNEL, (e) => {
     if (!alive() || e.sender !== win.webContents) return
@@ -62,9 +80,10 @@ function registerChat(deps) {
   // Re-derive the bounds from the origin (the avatar moved, a display changed, the side setting changed). setBounds with the full size:
   // setPosition alone can resize a transparent window that crosses to a display with another scale factor.
   function follow() { if (alive()) win.setBounds(boundsNow()) }
+  function locked(v) { if (alive() && !win.webContents.isDestroyed()) win.webContents.send('layout-locked', !!v) }
   function avatarVisible(v) { if (alive() && !win.webContents.isDestroyed()) win.webContents.send('avatar-visible', !!v) }
 
-  return { open, close, toggle, follow, avatarVisible, isOpen: alive, getWindow: () => win, boundsNow }
+  return { open, close, toggle, follow, locked, avatarVisible, isOpen: alive, getWindow: () => win, boundsNow }
 }
 
-module.exports = { registerChat, pageConfig, allowNavigation, CONFIG_CHANNEL, CLOSE_CHANNEL }
+module.exports = { registerChat, pageConfig, allowNavigation, CONFIG_CHANNEL, CLOSE_CHANNEL, DRAG_CHANNEL }

@@ -101,7 +101,16 @@
       body.orb { --orb: 120px; }
       body.orb #orb { display: block; }
       body.orb #stage { display: none; }
+      /* Above the orb, never on it: the text box first, the bubble above that (higher still while the box is open). */
       body.orb #bubble { bottom: calc(var(--orb) + 36px); }
+      body.orb:has(#inputbox.show) #bubble { bottom: calc(var(--orb) + 96px); }
+      body.orb #inputbox { bottom: calc(var(--orb) + 34px); }
+      /* What the user moved: --dx/--dy on each element (src/ui/layout.js). */
+      #bubble, #inputbox, #histbtn, #actions { translate: var(--dx, 0px) var(--dy, 0px); }
+      .grip { position: fixed; display: none; width: 34px; height: 12px; border-radius: 6px; cursor: move; touch-action: none; z-index: 5;
+        background: rgba(196, 181, 253, .75); box-shadow: 0 1px 4px rgba(0,0,0,.45); }
+      .grip.show { display: block; }
+      body.locked .grip { display: none; }
       body.orb #chips { bottom: calc(var(--orb) + 8px); }
       body.orb #actions { bottom: calc(var(--orb) + 26px); }
       #inputbox { position: fixed; left: 12px; right: 12px; bottom: 12px; display: none; }

@@ -1,5 +1,6 @@
 import { createAvatar } from './avatar/avatar.js'
 import { createOrb } from './ui/orb.js'
+import { createLayout } from './ui/layout.js'
 import { createExpressionController } from './avatar/expression.js'
 import { createSocket } from './net/socket.js'
 import { createEvents } from './net/events.js'
@@ -96,7 +97,14 @@ async function boot() {
   })
   window.nova.onNotesClear(() => notifier.clear())
   const popAllowed = () => decideProactive(config.proactive, { now: new Date() }).pop       // false during quiet hours: cards wait behind the bell
-  const hotEls = [...document.querySelectorAll('.hot')]
+  // Things the user can move (and lock in place): grips appear above them while the layout is unlocked.
+  const layout = createLayout(document, {
+    els: { bubble: document.getElementById('bubble'), inputbox: document.getElementById('inputbox'), histbtn: document.getElementById('histbtn'), actions: document.getElementById('actions') },
+    isLocked: () => !!config.display.layout.locked,
+    save: (ui) => window.nova.settingsSet({ display: { layout: { ui } } }),
+  })
+  layout.apply(config.display.layout)
+  const hotEls = [...document.querySelectorAll('.hot'), ...layout.grips]
   // Elements that take the mouse while the cursor is over them (shown ones only); everywhere else stays click-through.
   const overHot = (c) => hotEls.some((e) => {
     if (getComputedStyle(e).display === 'none') return false
@@ -360,6 +368,7 @@ async function boot() {
     config = await window.nova.getConfig()
     smokeLog(`settings applied ${JSON.stringify(config.backendSettings)} mic=${config.voiceIn} device=${config.micDeviceId || 'default'}`)
     voice.setEchoMode(config.echoMode)
+    layout.apply(config.display.layout)
     if (orbMode && config.display.orbPx !== prev.display.orbPx) { avatar.setSize(config.display.orbPx); sizeOrb(avatar.size()) }
     if (socket) sendVoiceSettings()
     if (!config.voiceIn) await stopVoice()
@@ -391,6 +400,9 @@ async function boot() {
     if (ui.includes('rate')) setTimeout(() => click('#actions .rb', 0), 5000)
     if (ui.includes('react')) setTimeout(() => click('#actions .rb', 2), 5500)
     if (ui.includes('drawer')) setTimeout(() => click('#histbtn', 0), 6000)
+    if (ui.includes('bg')) document.body.style.background = 'linear-gradient(160deg, #2b2652, #15121f)'      // screenshots: the overlay is transparent, so give the capture a backdrop
+    if (ui.includes('input')) setTimeout(() => input.show(), 5000)
+    if (ui.includes('radial')) setTimeout(() => openRadial(0, 0), 5000)
   }
 
   // ── radial menu: right-click on her. "Talk" is handled here; everything else is the main process's (windows, hiding the avatar) ──
@@ -404,25 +416,29 @@ async function boot() {
   })
   radialEl.addEventListener('click', () => radial.close())          // a click outside the buttons closes it
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && radial.isOpen()) radial.close() })
+  // With the orb the menu fans out around it, so it never covers it; with the avatar it opens where she was clicked.
+  const openRadial = (x, y) => {
+    if (orbMode) { const r = orbEl.getBoundingClientRect(); radial.open(x, y, window.innerWidth, window.innerHeight, { cx: r.left + r.width / 2, cy: r.top + r.height / 2, radius: avatar.size() / 2 + 38 }) }
+    else radial.open(x, y)
+  }
   grab.addEventListener('contextmenu', (e) => {
     e.preventDefault()
     if (!state.interactive || state.dragging) return
-    radial.open(e.clientX, e.clientY)
+    openRadial(e.clientX, e.clientY)
   })
 
   // ── drag by grabbing the avatar; a click without movement opens the input ─
   let downAt = null
   grab.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !state.interactive) return
-    state.dragging = true
+    state.dragging = !config.display.layout.locked      // locked: a press can still be a click, but nothing is dragged
     downAt = { x: e.screenX, y: e.screenY }
     grab.setPointerCapture(e.pointerId)
-    window.nova.dragStart()
+    if (state.dragging) window.nova.dragStart()
   })
   const endDrag = (e) => {
-    if (!state.dragging) return
-    state.dragging = false
-    window.nova.dragEnd()
+    if (!downAt) return
+    if (state.dragging) { state.dragging = false; window.nova.dragEnd() }
     const moved = downAt ? Math.hypot(e.screenX - downAt.x, e.screenY - downAt.y) : Infinity
     downAt = null
     if (e.type === 'pointerup' && moved < CLICK_SLOP_PX) {
@@ -450,13 +466,14 @@ async function boot() {
     }
     avatar.update(dt)
     avatar.render()
+    layout.tick()
 
     const c = state.cursor
     if (c) {
       avatar.lookAtNormalized((c.x / c.w) * 2 - 1, 1 - (c.y / c.h) * 2)
       // Stay interactive while dragging or typing; otherwise only while the cursor is over avatar pixels.
       const over = c.x >= 0 && c.y >= 0 && c.x < c.w && c.y < c.h && avatar.alphaAt(c.x, c.y) >= HIT_ALPHA
-      setInteractive(state.dragging || input.isOpen() || radial.isOpen() || over || overHot(c))
+      setInteractive(state.dragging || layout.dragging() || input.isOpen() || radial.isOpen() || over || overHot(c))
       statusEl.textContent = `${state.net}  cursor ${Math.round(c.x)},${Math.round(c.y)}  ${state.interactive ? 'AVATAR' : 'click-through'}`
     }
     requestAnimationFrame(frame)

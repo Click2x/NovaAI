@@ -31,8 +31,9 @@ export const SECTIONS = [
   { title: 'Display', fields: [
     { path: 'display.avatar', type: 'bool', label: 'Show the avatar', hint: 'Off hides the overlay completely; Nova keeps running (voice, tray, notifications). Bring it back with Ctrl+Alt+N or the tray.' },
     { path: 'display.chat', type: 'bool', label: 'Chat window beside her', hint: 'A small chat window that opens next to the avatar and moves with her (Ctrl+Alt+C). It works with the avatar hidden too.' },
+    { path: 'display.layout.locked', type: 'bool', label: 'Lock the layout', hint: 'Off: drag the grip above the bubble, the text box and the buttons, the chat window by its title, or the orb itself. On: nothing moves. "Reset layout" in the tray puts everything back.' },
     { path: 'display.style', type: 'select', label: 'How I look', options: [['orb', 'A small glowing orb'], ['avatar', 'An avatar (VRM)']],
-      hint: 'The orb sits in the corner of the screen and pulses when she speaks. The avatar I ship with is only a placeholder and does not reflect the quality of the final result.' },
+      hint: 'The orb sits in the corner of the screen and pulses when she speaks.' },
     { path: 'display.orbPercent', type: 'range', label: 'Orb size', min: 4, max: 20, step: 1, unit: '%', hint: 'Its width as a share of the screen width.' },
     { path: 'display.vrm', type: 'text', label: 'Avatar file', placeholder: 'the bundled placeholder avatar', hint: 'Used when "How I look" is an avatar. Path to a .vrm file. Easiest to set from Set up Nova... in the tray, which also checks the file. Empty = the bundled avatar.' },
     { path: 'display.chatSide', type: 'select', label: 'Chat window side', options: [['auto', 'Automatic'], ['left', 'Left of her'], ['right', 'Right of her']],

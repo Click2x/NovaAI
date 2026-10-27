@@ -117,12 +117,10 @@ test('settings: the orb is the default look, sized at a tenth of the screen', ()
   assert.equal(S.applyPatch(S.DEFAULTS, { display: { style: 'avatar' } }).display.style, 'avatar')
 })
 
-test('settings panel rows for the look, with the placeholder notice', () => {
+test('settings panel rows for the look', () => {
   const rows = SECTIONS.flatMap((s) => s.fields).filter((f) => f.path.startsWith('display.'))
   const style = rows.find((f) => f.path === 'display.style')
   assert.deepEqual(style.options.map((o) => o[0]), ['orb', 'avatar'])
-  assert.match(style.hint, /placeholder/)
-  assert.match(style.hint, /does not reflect the quality of the final result/)
   const size = rows.find((f) => f.path === 'display.orbPercent')
   assert.deepEqual([size.type, size.min, size.max], ['range', 4, 20])
   for (const f of rows) assert.notEqual(getPath(S.DEFAULTS, f.path), undefined, f.path)

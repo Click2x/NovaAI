@@ -1,5 +1,5 @@
 // The setup page: wires the backend (api.js), the state (model.js), the screen (view.js), her voice (speaker.js) and an orb that
-// swells with the sound while she speaks (no avatar during setup: the bundled one is only a placeholder).
+// swells with the sound while she speaks (no avatar during setup).
 import { createVad } from '../voice/vad.js'
 import { createApi } from './api.js'
 import { initial, reduce, newInstallLines, orbLevel } from './model.js'

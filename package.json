@@ -8,7 +8,7 @@
                     "dev":  "concurrently -k -n vite,electron \"vite\" \"wait-on tcp:5174 \u0026\u0026 cross-env NOVA_DEV=1 electron .\"",
                     "build":  "vite build",
                     "start":  "vite build \u0026\u0026 electron .",
-                    "test":  "node --test test/state.test.mjs test/screen.test.mjs test/settings.test.mjs test/packaging.test.mjs test/home.test.mjs test/updates.test.mjs test/today.test.mjs test/continuity.test.mjs test/gpu.test.mjs test/notify.test.mjs test/training.test.mjs test/code.test.mjs test/display.test.mjs test/onboarding.test.mjs test/orb.test.mjs",
+                    "test":  "node --test test/state.test.mjs test/screen.test.mjs test/settings.test.mjs test/packaging.test.mjs test/home.test.mjs test/updates.test.mjs test/today.test.mjs test/continuity.test.mjs test/gpu.test.mjs test/notify.test.mjs test/training.test.mjs test/code.test.mjs test/display.test.mjs test/onboarding.test.mjs test/orb.test.mjs test/layout.test.mjs",
                     "pack":  "vite build \u0026\u0026 electron-builder --dir",
                     "dist":  "vite build \u0026\u0026 electron-builder --win nsis",
                     "icon":  "node tools/make-icon.js"
@@ -73,5 +73,10 @@
                   "npmRebuild":  false
               },
     "author":  "Nova.Ai contributors",
+    "repository":  {
+                        "type":  "git",
+                        "url":  "git+https://github.com/Click2x/NovaAI.git"
+                    },
+    "homepage":  "https://github.com/Click2x/NovaAI",
     "license":  "GPL-3.0-only"
 }

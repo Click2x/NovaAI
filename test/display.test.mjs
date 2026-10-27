@@ -19,14 +19,14 @@ const AVATAR = { x: 1500, y: 360, width: 420, height: 680 }      // WIN_W x WIN_
 
 // ── settings ──
 test('display defaults: avatar on, chat window off, automatic side', () => {
-  assert.deepEqual(S.DEFAULTS.display, { avatar: true, chat: false, chatSide: 'auto', vrm: '', style: 'orb', orbPercent: 10 })
+  assert.deepEqual(S.DEFAULTS.display, { avatar: true, chat: false, chatSide: 'auto', vrm: '', style: 'orb', orbPercent: 10, layout: { locked: false, chat: { x: 0, y: 0 }, ui: {} } })
   assert.deepEqual(S.sanitize({ display: { avatar: 'no', chat: 1, chatSide: 'up' } }).display, S.DEFAULTS.display)
-  assert.deepEqual(S.applyPatch(S.DEFAULTS, { display: { avatar: false, chat: true, chatSide: 'right' } }).display, { avatar: false, chat: true, chatSide: 'right', vrm: '', style: 'orb', orbPercent: 10 })
+  assert.deepEqual(S.applyPatch(S.DEFAULTS, { display: { avatar: false, chat: true, chatSide: 'right' } }).display, { avatar: false, chat: true, chatSide: 'right', vrm: '', style: 'orb', orbPercent: 10, layout: { locked: false, chat: { x: 0, y: 0 }, ui: {} } })
 })
 
 test('the Display rows exist and round-trip', () => {
   const sec = SECTIONS.find((s) => s.title === 'Display')
-  assert.deepEqual(sec.fields.map((f) => f.path), ['display.avatar', 'display.chat', 'display.style', 'display.orbPercent', 'display.vrm', 'display.chatSide'])
+  assert.deepEqual(sec.fields.map((f) => f.path), ['display.avatar', 'display.chat', 'display.layout.locked', 'display.style', 'display.orbPercent', 'display.vrm', 'display.chatSide'])
   for (const f of sec.fields) assert.notEqual(getPath(S.DEFAULTS, f.path), undefined)
   assert.equal(getPath(S.applyPatch(S.DEFAULTS, patchFor('display.avatar', false)), 'display.avatar'), false)
 })
@@ -92,8 +92,8 @@ test('radial ring is pushed inside the window near an edge and shrinks in a smal
   for (const p of small.points) assert.ok(p.x >= 22 && p.x <= 128 && p.y >= 22 && p.y <= 128)
 })
 
-test('radial items: talk, chat, home, code, settings, hide - unique ids', () => {
-  assert.deepEqual(RADIAL_ITEMS.map((i) => i.id), ['talk', 'chat', 'home', 'code', 'settings', 'hide'])
+test('radial items: talk, chat, home, code, settings, lock, hide - unique ids', () => {
+  assert.deepEqual(RADIAL_ITEMS.map((i) => i.id), ['talk', 'chat', 'home', 'code', 'settings', 'lock', 'hide'])
 })
 
 // ── chat model ──
@@ -227,7 +227,7 @@ test('the page config and close come only from the chat window itself', () => {
   api.open()
   const w = f.made[0]
   const cfg = f.handlers['chat-config']({ sender: w.webContents })
-  assert.deepEqual(cfg, { wsUrl: 'ws://127.0.0.1:8000/api/desktop/ws', backendSettings: { tts: true, voice: 'af_heart' }, avatarVisible: true })
+  assert.deepEqual(cfg, { wsUrl: 'ws://127.0.0.1:8000/api/desktop/ws', backendSettings: { tts: true, voice: 'af_heart' }, avatarVisible: true, locked: false })
   assert.equal(f.handlers['chat-config']({ sender: {} }), null)
   f.listeners['chat-close']({ sender: {} })
   assert.equal(api.isOpen(), true)

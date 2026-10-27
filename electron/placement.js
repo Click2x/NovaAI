@@ -83,6 +83,20 @@ function chatBounds(displays, avatarBounds, size = CHAT_SIZE, side = 'auto') {
   return { x: Math.round(x), y: Math.round(y), width, height, side: used }
 }
 
+// `base` bounds moved by the user's offset { x, y }, kept fully inside the work area of the display it lands on. Returns the bounds and the
+// offset that was actually applied (what to save, so a spot off screen is never remembered).
+function shifted(displays, base, off) {
+  const n = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const x = base.x + n(off && off.x)
+  const y = base.y + n(off && off.y)
+  const display = pickDisplay(displays, { x: x + Math.floor(base.width / 2), y: y + Math.floor(base.height / 2) })
+  if (!display) return { x: base.x, y: base.y, width: base.width, height: base.height, offset: { x: 0, y: 0 } }
+  const w = display.workArea
+  const cx = Math.min(Math.max(x, w.x), Math.max(w.x, right(w) - base.width))
+  const cy = Math.min(Math.max(y, w.y), Math.max(w.y, bottom(w) - base.height))
+  return { x: Math.round(cx), y: Math.round(cy), width: base.width, height: base.height, offset: { x: Math.round(cx - base.x), y: Math.round(cy - base.y) } }
+}
+
 // The orb's diameter in DIPs: `percent` of the display's work-area width, kept between 72 px (still easy to hit) and 360 px.
 const ORB_MIN = 72
 const ORB_MAX = 360
@@ -91,4 +105,4 @@ function orbDiameter(workArea, percent) {
   return Math.round(Math.min(ORB_MAX, Math.max(ORB_MIN, workArea.width * pct / 100)))
 }
 
-module.exports = { DEFAULT_OFFSET, CHAT_SIZE, ORB_MIN, ORB_MAX, orbDiameter, CHAT_OVERLAP, displayKey, pickDisplay, boundsFor, offsetOf, resolve, remember, chatBounds }
+module.exports = { DEFAULT_OFFSET, CHAT_SIZE, ORB_MIN, ORB_MAX, orbDiameter, shifted, CHAT_OVERLAP, displayKey, pickDisplay, boundsFor, offsetOf, resolve, remember, chatBounds }

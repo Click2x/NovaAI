@@ -24,7 +24,7 @@ const DEFAULTS = Object.freeze({
   backend: { url: 'http://127.0.0.1:8000', startScript: '', controlUrl: 'http://127.0.0.1:8765' },
   models: { agentSwap: 'always', agentModel: '', chatReloadMinutes: 5 },   // GPU swap policy (roadmap D10), applied by the backend arbiter; agentModel '' = the backend's default
   proactive: { speak: 'off', quietEnabled: false, quietStart: '22:00', quietEnd: '08:00' },   // P8 (roadmap D12): say her own messages aloud? off by default; quiet hours silence and hide pop-ups (cards wait in the centre)
-  display: { avatar: true, chat: false, chatSide: 'auto', vrm: '', style: 'orb', orbPercent: 10 },   // style: what she looks like on the desktop, a small orb (default) or the VRM avatar; orbPercent: the orb's diameter as a percentage of the screen width (it sits in the corner)   // avatar: show the overlay at all (off = Nova keeps running, tray/hotkeys/chat window still work); chat: the chat window by her; chatSide: which side of the shared origin it opens on
+  display: { avatar: true, chat: false, chatSide: 'auto', vrm: '', style: 'orb', orbPercent: 10, layout: { locked: false, chat: { x: 0, y: 0 }, ui: {} } },   // layout: where the user moved things (chat: offset of the chat window from its default spot; ui: offsets of the overlay's bubble, input, history button and action buttons); locked: nothing can be dragged   // style: what she looks like on the desktop, a small orb (default) or the VRM avatar; orbPercent: the orb's diameter as a percentage of the screen width (it sits in the corner)   // avatar: show the overlay at all (off = Nova keeps running, tray/hotkeys/chat window still work); chat: the chat window by her; chatSide: which side of the shared origin it opens on
   placement: { lastDisplay: null, byDisplay: {} },   // see placement.js: the ONE origin both the avatar and the chat window are placed from
 })
 
@@ -98,6 +98,24 @@ function cleanFolder(v, fallback) {
   const t = v.trim()
   if (!t) return ''
   return t.length <= 260 && !/[\u0000-\u001f"]/.test(t) ? t : fallback
+}
+
+// What the user can move around, and whether it is locked. Offsets are whole numbers within +-4000 px; unknown elements are dropped, zero offsets are not stored.
+const MOVABLE_UI = ['bubble', 'inputbox', 'histbtn', 'actions']
+function cleanOffset(v, fallback) {
+  if (!isObj(v)) return fallback
+  const n = (x, f) => (typeof x === 'number' && Number.isFinite(x) ? Math.round(Math.min(4000, Math.max(-4000, x))) : f)
+  return { x: n(v.x, fallback.x), y: n(v.y, fallback.y) }
+}
+function cleanLayout(v, fallback) {
+  const l = isObj(v) ? v : {}
+  const from = isObj(l.ui) ? l.ui : fallback.ui
+  const ui = {}
+  for (const id of MOVABLE_UI) {
+    const o = cleanOffset(from[id], { x: 0, y: 0 })
+    if (o.x || o.y) ui[id] = o
+  }
+  return { locked: bool(l.locked, fallback.locked), chat: cleanOffset(l.chat, fallback.chat), ui }
 }
 
 // The orb's size as a share of the screen width: 4 to 20 percent, whole numbers.
@@ -219,6 +237,7 @@ function sanitizeRaw(input, base) {
       vrm: cleanVrm(display.vrm, b.display.vrm),
       style: oneOf(display.style, LOOKS, b.display.style),
       orbPercent: cleanOrbPercent(display.orbPercent, b.display.orbPercent),
+      layout: cleanLayout(display.layout, b.display.layout),
     },
     placement: cleanPlacement(src.placement, b.placement),
   }
@@ -352,4 +371,4 @@ function applyAutostart(app, enabled, packaged) {
   return { applied: true }
 }
 
-module.exports = { VERSION, DEFAULTS, DEFAULT_PHRASES, CHAT_SIDES, LOOKS, CHAT_MODES, AUTONOMY_MODES, AGENT_MODES, ECHO_MODES, SCOPES, SPEAK_MODES, cleanClock, sanitize, applyPatch, envOverrides, effective, toBackend, gpuPolicy, AGENT_SWAPS, backendHttpUrl, backendWsUrl, cleanPhrases, loadFrom, saveTo, applyAutostart }
+module.exports = { MOVABLE_UI, VERSION, DEFAULTS, DEFAULT_PHRASES, CHAT_SIDES, LOOKS, CHAT_MODES, AUTONOMY_MODES, AGENT_MODES, ECHO_MODES, SCOPES, SPEAK_MODES, cleanClock, sanitize, applyPatch, envOverrides, effective, toBackend, gpuPolicy, AGENT_SWAPS, backendHttpUrl, backendWsUrl, cleanPhrases, loadFrom, saveTo, applyAutostart }
