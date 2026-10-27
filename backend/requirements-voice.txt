@@ -1,0 +1,5 @@
+# Optional: her voice (Kokoro) and speech recognition (faster-whisper). Large downloads; the backend runs without them.
+kokoro>=0.9.4
+soundfile>=0.12
+numpy
+faster-whisper>=1.0

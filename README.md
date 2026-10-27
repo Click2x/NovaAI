@@ -12,7 +12,7 @@ Nova.Ai is a desktop companion: a VRM avatar that lives on your desktop, talks a
 
 ## What you need
 
-Nova.Ai is a client. It talks to a **Nova backend** over a local WebSocket (`ws://127.0.0.1:8000`, protocol v1: `/api/desktop/ws` and `/api/agent/ws`). The backend is not part of this repository and is not published yet, so the app does not do anything useful on its own. Point it at a compatible backend with `NOVA_BACKEND` or Settings > Backend.
+Nova.Ai is a client. It talks to a backend over a local WebSocket (`ws://127.0.0.1:8000`, protocol v1: `/api/desktop/ws`). The backend lives in [`backend/`](backend/README.md) in this repository: a small Python server that uses [Ollama](https://ollama.com) for models, with Mistral NeMo as her voice, a model router for tool calling, a harm filter you can turn off, and a guided, voiced onboarding. Start it with `python -m novaai serve`.
 
 ## Build and run
 
