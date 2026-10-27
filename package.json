@@ -45,12 +45,6 @@
                   "asarUnpack":  [
                                      "node_modules/get-windows/**"
                                  ],
-                  "extraResources":  [
-                                         {
-                                             "from":  "assets/vrm/Nova_v1_grunge.vrm",
-                                             "to":  "vrm/Nova_v1_grunge.vrm"
-                                         }
-                                     ],
                   "win":  {
                               "icon":  "build/icon.ico",
                               "target":  [

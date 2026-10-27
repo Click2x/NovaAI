@@ -35,7 +35,7 @@ export const SECTIONS = [
     { path: 'display.style', type: 'select', label: 'How I look', options: [['orb', 'A small glowing orb'], ['avatar', 'An avatar (VRM)']],
       hint: 'The orb sits in the corner of the screen and pulses when she speaks.' },
     { path: 'display.orbPercent', type: 'range', label: 'Orb size', min: 4, max: 20, step: 1, unit: '%', hint: 'Its width as a share of the screen width.' },
-    { path: 'display.vrm', type: 'text', label: 'Avatar file', placeholder: 'the bundled placeholder avatar', hint: 'Used when "How I look" is an avatar. Path to a .vrm file. Easiest to set from Set up Nova... in the tray, which also checks the file. Empty = the bundled avatar.' },
+    { path: 'display.vrm', type: 'text', label: 'Avatar file', placeholder: 'none, she is an orb', hint: 'Used when "How I look" is an avatar. Path to a .vrm file. Easiest to set from Set up Nova... in the tray, which also checks the file. Empty = no avatar, she stays an orb.' },
     { path: 'display.chatSide', type: 'select', label: 'Chat window side', options: [['auto', 'Automatic'], ['left', 'Left of her'], ['right', 'Right of her']],
       hint: 'Both are placed from one saved position; drag either and the other follows.' },
   ] },

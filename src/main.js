@@ -38,7 +38,7 @@ function setInteractive(on) {
 async function boot() {
   let config = await window.nova.getConfig()   // re-read when the settings change (see the settings handler below)
   // What she looks like: a small orb by default (it swells with her voice, no model to load), or the VRM avatar when the user chose one.
-  const orbMode = config.display.style !== 'avatar'
+  const orbMode = config.display.style !== 'avatar' || !config.display.hasAvatar      // no avatar file chosen: the orb
   const orbEl = document.getElementById('orb')
   const grab = orbMode ? orbEl : canvas        // the element that is dragged, clicked and right-clicked
   const sizeOrb = (px) => document.body.style.setProperty('--orb', px + 'px')

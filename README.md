@@ -38,11 +38,11 @@ Settings live in `settings.json` under the Electron user-data folder; environmen
 
 ## Avatar
 
-`assets/vrm/Nova_v1_grunge.vrm` is bundled and is the avatar the app loads. **It is a placeholder: it does not reflect the quality of the final result.** Set `NOVA_VRM=<path to a .vrm file>` to use your own. A picker in Settings is planned.
+No avatar model ships with Nova.Ai: she is an orb. To use an avatar of your own, choose a `.vrm` file in setup ("Use my own avatar...") or Settings > Display, then set "How I look" to the avatar. `NOVA_VRM=<path to a .vrm file>` does the same for development.
 
 ## License
 
-GPL-3.0-only, see `LICENSE`. The bundled avatar is distributed with this repository; check it before reusing it elsewhere.
+GPL-3.0-only, see `LICENSE`. No avatar model is distributed with this repository.
 
 ## History
 

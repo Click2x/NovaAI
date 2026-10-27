@@ -124,7 +124,7 @@ function cleanOrbPercent(v, fallback) {
   return Math.round(Math.min(20, Math.max(4, v)))
 }
 
-// Path of a custom avatar: empty (use the bundled one) or one line ending in .vrm. Whether the file is usable is checked when it is loaded.
+// Path of a custom avatar: empty (the orb) or one line ending in .vrm. Whether the file is usable is checked when it is loaded.
 function cleanVrm(v, fallback) {
   if (typeof v !== 'string') return fallback
   const t = v.trim()

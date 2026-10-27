@@ -16,17 +16,16 @@ test('electron-builder config points at things that exist', () => {
   assert.deepEqual(b.win.target, [{ target: 'nsis', arch: ['x64'] }])
   assert.equal(b.nsis.oneClick, false)
   assert.equal(b.publish, null)                                    // never tries to upload anything
-  for (const r of b.extraResources) assert.ok(fs.existsSync(path.resolve(root, r.from)), r.from)
+  for (const r of b.extraResources || []) assert.ok(fs.existsSync(path.resolve(root, r.from)), r.from)
   assert.ok(b.files.includes('electron/**/*') && b.files.includes('dist/**/*'))
   assert.ok(b.asarUnpack.includes('node_modules/get-windows/**'))   // get-windows runs a helper binary, it cannot live inside the asar
   assert.ok(fs.existsSync(path.join(root, 'node_modules', 'get-windows', 'main')) || !fs.existsSync(path.join(root, 'node_modules', 'get-windows')))
 })
 
-test('the packaged avatar path in main.js matches extraResources', () => {
-  const r = pkg.build.extraResources.find((x) => x.from.endsWith('Nova_v1_grunge.vrm'))
-  assert.ok(r)
-  assert.match(main, /process\.resourcesPath, 'vrm', 'Nova_v1_grunge\.vrm'/)
-  assert.equal(r.to, 'vrm/Nova_v1_grunge.vrm')
+test('no avatar model ships with the app: nothing is packaged, and .vrm files stay out of git', () => {
+  assert.equal(pkg.build.extraResources, undefined)
+  assert.doesNotMatch(main, /resourcesPath, 'vrm'/)
+  assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /^\*\.vrm$/m)
 })
 
 test('every page is a build input, and the scripts exist', () => {

@@ -30,15 +30,13 @@ const DEV = process.env.NOVA_DEV === '1'
 const WIN_W = 420
 const WIN_H = 680
 const POLL_MS = 33
-// Packaged builds carry the model in resources/ (electron-builder extraResources); from source it is assets/vrm in this repo.
-const DEFAULT_VRM = app.isPackaged
-  ? path.join(process.resourcesPath, 'vrm', 'Nova_v1_grunge.vrm')
-  : path.resolve(__dirname, '..', 'assets', 'vrm', 'Nova_v1_grunge.vrm')
-const VRM_PATH = process.env.NOVA_VRM ? path.resolve(process.env.NOVA_VRM) : DEFAULT_VRM
-// NOVA_VRM (a test/developer override) wins; then the avatar the user chose in setup (display.vrm) if it is still there; then the bundled one.
+// No avatar ships with the app: she is an orb until the user points the app at a .vrm of their own (setup or Settings > Display).
+// NOVA_VRM (a test/developer override) wins; then the avatar the user chose (display.vrm) if it is still there; otherwise '' (the orb).
+const VRM_PATH = process.env.NOVA_VRM ? path.resolve(process.env.NOVA_VRM) : ''
 function vrmFile() {
   const custom = eff().display.vrm
-  return !process.env.NOVA_VRM && custom && fs.existsSync(custom) ? custom : VRM_PATH
+  if (!process.env.NOVA_VRM && custom && fs.existsSync(custom)) return custom
+  return VRM_PATH && fs.existsSync(VRM_PATH) ? VRM_PATH : ''
 }
 
 // Only this one file is ever served through nova-asset://, no path is taken from the URL.
@@ -409,7 +407,7 @@ app.whenReady().then(() => {
 
   protocol.handle('nova-asset', (req) => {
     const file = vrmFile()
-    if (new URL(req.url).hostname !== 'avatar.vrm' || !fs.existsSync(file)) {
+    if (new URL(req.url).hostname !== 'avatar.vrm' || !file) {
       return new Response('not found', { status: 404 })
     }
     return net.fetch(pathToFileURL(file).toString())
@@ -540,7 +538,7 @@ ipcMain.handle('get-config', () => {
     backend: settingsLib.backendWsUrl(e, process.env),   // NOVA_BACKEND (ws://...) still wins
     smokeUi: process.env.NOVA_SMOKE_UI || '',   // test hook: comma list of rate, react, drawer; the overlay clicks those controls itself
     backendHttp: settingsLib.backendHttpUrl(e, process.env),   // where the overlay loads pictures and video from
-    display: { style: e.display.style, orbPx: orbPx(), layout: e.display.layout },       // what she looks like on the desktop and how big the orb is on this screen
+    display: { style: e.display.style, orbPx: orbPx(), layout: e.display.layout, hasAvatar: !!vrmFile() },       // what she looks like on the desktop and how big the orb is on this screen
     autoSay: process.env.NOVA_SMOKE_SAY || null, // test hook: send this text once connected
     // Everything below comes from the settings file with env overrides on top (settings.js); the renderer re-reads it on 'settings-changed'.
     backendSettings: settingsLib.toBackend(e),   // the `settings` message for the backend
