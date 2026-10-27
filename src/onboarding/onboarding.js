@@ -1,16 +1,12 @@
-// The setup page: wires the backend (api.js), the state (model.js), the screen (view.js), her voice (speaker.js) and her face
-// (the same VRM renderer as the overlay, framed head and shoulders, lip-synced to the audio that is playing).
-import { createAvatar } from '../avatar/avatar.js'
-import { createExpressionController } from '../avatar/expression.js'
-import { createLipSync } from '../avatar/lipsync.js'
+// The setup page: wires the backend (api.js), the state (model.js), the screen (view.js), her voice (speaker.js) and an orb that
+// swells with the sound while she speaks (no avatar during setup: the bundled one is only a placeholder).
 import { createVad } from '../voice/vad.js'
 import { createApi } from './api.js'
-import { initial, reduce, newInstallLines } from './model.js'
+import { initial, reduce, newInstallLines, orbLevel } from './model.js'
 import { createSpeaker } from './speaker.js'
 import { createView } from './view.js'
 
 const $ = (id) => document.getElementById(id)
-const EMOTION_MAP = { warm: 'caring', happy: 'happy', curious: 'curious', sad: 'sad', neutral: 'neutral' }
 
 async function main() {
   const shell = window.novaSetup
@@ -18,7 +14,6 @@ async function main() {
   const api = createApi(config.httpBase)
   let state = initial()
   let view = null
-  let avatar = null, expression = null, lipsync = null
   let pollTimer = null, offlineTimer = null
   let voiceId = 'af_heart', speed = 1
 
@@ -71,7 +66,6 @@ async function main() {
     onLine: (line) => {
       dispatch({ type: 'caption', text: line.text, emotion: line.emotion })
       dispatch({ type: 'her_line', text: line.text })
-      if (expression) expression.set(EMOTION_MAP[line.emotion] || 'neutral')
     },
     onState: (on) => {
       dispatch({ type: 'speaking', on })
@@ -86,40 +80,18 @@ async function main() {
     if (view) view.render(state)
   }
 
-  // ── face ──
-  const canvas = $('face')
-  async function loadAvatar() {
-    canvas.hidden = false                            // the renderer sizes itself from the canvas, which has no size while it is hidden
-    $('orb').hidden = true
-    try {
-      avatar = await createAvatar(canvas, 'nova-asset://avatar.vrm?v=' + Date.now(), { frame: 'bust' })
-      expression = createExpressionController(avatar)
-      lipsync = createLipSync({ analyser, apply: (shapes) => avatar.setVisemes(shapes) })
-      window.dispatchEvent(new Event('resize'))      // size the renderer to the laid-out canvas
-    } catch {
-      avatar = null
-      canvas.hidden = true
-      $('orb').hidden = false                        // no avatar loaded: a soft glowing orb stands in
-    }
-  }
-  let last = performance.now()
-  let fake = 0
-  function frame(now) {
-    const dt = Math.min((now - last) / 1000, 0.1)
-    last = now
-    if (avatar) {
-      if (expression) expression.update(dt)
-      if (lipsync) {
-        const r = lipsync.update(ctx.sampleRate)
-        if (state.speaking && r.rms < 0.004 && !state.muted && !backendVoice) {      // system voice has no waveform to read: a gentle talking motion
-          fake += dt * 9
-          avatar.setVisemes({ aa: 0.25 + 0.2 * Math.sin(fake), ih: 0, ou: 0.1 * Math.max(0, Math.sin(fake * 0.6)), ee: 0, oh: 0 })
-        }
-      }
-      avatar.update(dt)
-      avatar.render()
-    }
-    $('orb').classList.toggle('speaking', state.speaking)
+  // ── the orb: swells with the sound that is playing; with the system voice (no waveform to read) it pulses on its own ──
+  const orb = $('orb')
+  const wave = new Float32Array(analyser.fftSize)
+  let level = 0
+  function frame() {
+    analyser.getFloatTimeDomainData(wave)
+    let sum = 0
+    for (let i = 0; i < wave.length; i++) sum += wave[i] * wave[i]
+    const target = orbLevel(Math.sqrt(sum / wave.length))
+    level += (target - level) * (target > level ? 0.5 : 0.15)
+    orb.style.setProperty('--level', level.toFixed(3))
+    orb.classList.toggle('pulse', state.speaking && level < 0.02)
     requestAnimationFrame(frame)
   }
 
@@ -310,8 +282,7 @@ async function main() {
       if (r.canceled) return
       if (!r.ok) { dispatch({ type: 'error', message: r.error || 'I could not use that file.' }); return }
       await api.setAvatar(r.path)
-      await loadAvatar()
-      say([{ id: 'avatar.new', text: 'Oh, this is me now. I like it.', emotion: 'happy' }])
+      say([{ id: 'avatar.new', text: "Got it. That's how I'll look on your desktop.", emotion: 'happy' }])
     },
     finish: () => { speaker.stop(); shell.finish() },
     later: () => { speaker.stop(); shell.later() },
@@ -322,7 +293,6 @@ async function main() {
 
   view = createView(document.body, A)
   view.render(state)
-  loadAvatar()
   requestAnimationFrame(frame)
   const st = await refresh()
   if (st) resume()

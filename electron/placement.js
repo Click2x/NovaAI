@@ -83,4 +83,12 @@ function chatBounds(displays, avatarBounds, size = CHAT_SIZE, side = 'auto') {
   return { x: Math.round(x), y: Math.round(y), width, height, side: used }
 }
 
-module.exports = { DEFAULT_OFFSET, CHAT_SIZE, CHAT_OVERLAP, displayKey, pickDisplay, boundsFor, offsetOf, resolve, remember, chatBounds }
+// The orb's diameter in DIPs: `percent` of the display's work-area width, kept between 72 px (still easy to hit) and 360 px.
+const ORB_MIN = 72
+const ORB_MAX = 360
+function orbDiameter(workArea, percent) {
+  const pct = Number.isFinite(percent) ? Math.min(20, Math.max(4, percent)) : 10
+  return Math.round(Math.min(ORB_MAX, Math.max(ORB_MIN, workArea.width * pct / 100)))
+}
+
+module.exports = { DEFAULT_OFFSET, CHAT_SIZE, ORB_MIN, ORB_MAX, orbDiameter, CHAT_OVERLAP, displayKey, pickDisplay, boundsFor, offsetOf, resolve, remember, chatBounds }

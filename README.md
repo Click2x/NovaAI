@@ -16,7 +16,7 @@ Nova.Ai is a client. It talks to a backend over a local WebSocket (`ws://127.0.0
 
 ## First run
 
-On a fresh install the app opens a guided, voiced setup (`Set up Nova...` in the tray opens it again): she introduces herself, checks your machine, downloads her models with spoken progress, gets to know you in a real conversation (type, or use the microphone), lets you audition voices, explains the safety filter in plain words, and lets you keep the bundled avatar or choose your own `.vrm` file. If no backend is running yet, the setup window says so and shows how to start it. If speech is not installed on the backend, she uses your computer's voice.
+On a fresh install the app opens a guided, voiced setup (`Set up Nova...` in the tray opens it again): she introduces herself, checks your machine, downloads her models with spoken progress, gets to know you in a real conversation (type, or use the microphone), lets you audition voices, explains the safety filter in plain words, and lets you keep the orb or choose your own `.vrm` avatar. On the desktop she is a small orb in the corner of the screen (about a tenth of the screen width, adjustable) that swells with her voice; the avatar is an option (Settings > Display > How I look). If no backend is running yet, the setup window says so and shows how to start it. If speech is not installed on the backend, she uses your computer's voice.
 
 ## Build and run
 
@@ -31,7 +31,7 @@ Settings live in `settings.json` under the Electron user-data folder; environmen
 
 ## Avatar
 
-`assets/vrm/Nova_v1_grunge.vrm` is bundled and is the avatar the app loads. Set `NOVA_VRM=<path to a .vrm file>` to use your own. A picker in Settings is planned.
+`assets/vrm/Nova_v1_grunge.vrm` is bundled and is the avatar the app loads. **It is a placeholder: it does not reflect the quality of the final result.** Set `NOVA_VRM=<path to a .vrm file>` to use your own. A picker in Settings is planned.
 
 ## License
 

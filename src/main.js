@@ -1,4 +1,5 @@
 import { createAvatar } from './avatar/avatar.js'
+import { createOrb } from './ui/orb.js'
 import { createExpressionController } from './avatar/expression.js'
 import { createSocket } from './net/socket.js'
 import { createEvents } from './net/events.js'
@@ -34,14 +35,26 @@ function setInteractive(on) {
 }
 
 async function boot() {
+  let config = await window.nova.getConfig()   // re-read when the settings change (see the settings handler below)
+  // What she looks like: a small orb by default (it swells with her voice, no model to load), or the VRM avatar when the user chose one.
+  const orbMode = config.display.style !== 'avatar'
+  const orbEl = document.getElementById('orb')
+  const grab = orbMode ? orbEl : canvas        // the element that is dragged, clicked and right-clicked
+  const sizeOrb = (px) => document.body.style.setProperty('--orb', px + 'px')
+  document.body.classList.toggle('orb', orbMode)
   let avatar
-  try {
-    avatar = await createAvatar(canvas, 'nova-asset://avatar.vrm')
-  } catch (err) {
-    statusEl.textContent = 'avatar failed: ' + err.message
-    document.body.classList.add('debug')
-    console.error(err)
-    return
+  if (orbMode) {
+    avatar = createOrb(orbEl, { size: config.display.orbPx })
+    sizeOrb(avatar.size())
+  } else {
+    try {
+      avatar = await createAvatar(canvas, 'nova-asset://avatar.vrm')
+    } catch (err) {
+      statusEl.textContent = 'avatar failed: ' + err.message
+      document.body.classList.add('debug')
+      console.error(err)
+      return
+    }
   }
 
   const expression = createExpressionController(avatar)
@@ -50,7 +63,6 @@ async function boot() {
   const chips = createChips(document.getElementById('chips'))
   const events = createEvents()
   let socket = null
-  let config = await window.nova.getConfig()   // re-read when the settings change (see applySettings)
 
   // ── phase 7: bubble text paced by playback, media card, thumbs/reactions, history drawer, "heard you" ──
   const sendMsg = (m) => socket && socket.send(m)
@@ -348,6 +360,7 @@ async function boot() {
     config = await window.nova.getConfig()
     smokeLog(`settings applied ${JSON.stringify(config.backendSettings)} mic=${config.voiceIn} device=${config.micDeviceId || 'default'}`)
     voice.setEchoMode(config.echoMode)
+    if (orbMode && config.display.orbPx !== prev.display.orbPx) { avatar.setSize(config.display.orbPx); sizeOrb(avatar.size()) }
     if (socket) sendVoiceSettings()
     if (!config.voiceIn) await stopVoice()
     else if (!vad || prev.micDeviceId !== config.micDeviceId) { await stopVoice(); await startVoice() }
@@ -391,7 +404,7 @@ async function boot() {
   })
   radialEl.addEventListener('click', () => radial.close())          // a click outside the buttons closes it
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && radial.isOpen()) radial.close() })
-  canvas.addEventListener('contextmenu', (e) => {
+  grab.addEventListener('contextmenu', (e) => {
     e.preventDefault()
     if (!state.interactive || state.dragging) return
     radial.open(e.clientX, e.clientY)
@@ -399,11 +412,11 @@ async function boot() {
 
   // ── drag by grabbing the avatar; a click without movement opens the input ─
   let downAt = null
-  canvas.addEventListener('pointerdown', (e) => {
+  grab.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !state.interactive) return
     state.dragging = true
     downAt = { x: e.screenX, y: e.screenY }
-    canvas.setPointerCapture(e.pointerId)
+    grab.setPointerCapture(e.pointerId)
     window.nova.dragStart()
   })
   const endDrag = (e) => {
@@ -417,8 +430,8 @@ async function boot() {
       else input.show()
     }
   }
-  canvas.addEventListener('pointerup', endDrag)
-  canvas.addEventListener('pointercancel', endDrag)
+  grab.addEventListener('pointerup', endDrag)
+  grab.addEventListener('pointercancel', endDrag)
 
   // ── frame loop ────────────────────────────────────────────────────────────
   let last = performance.now()

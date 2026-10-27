@@ -4,8 +4,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 
-// opts.frame: 'body' (default, the whole figure for the overlay) or 'bust' (head and shoulders, for the setup screen).
-export async function createAvatar(canvas, url, opts = {}) {
+export async function createAvatar(canvas, url) {
   // alpha + premultiplied so the window shows through; the hit-test reads alpha straight from the GL buffer.
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, premultipliedAlpha: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -38,9 +37,7 @@ export async function createAvatar(canvas, url, opts = {}) {
   const size = box.getSize(new THREE.Vector3())
   const center = box.getCenter(new THREE.Vector3())
   const fovRad = THREE.MathUtils.degToRad(camera.fov)
-  const bust = opts.frame === 'bust'
-  const dist = ((bust ? size.y * 0.36 : size.y * 1.08)) / (2 * Math.tan(fovRad / 2))
-  if (bust) center.y = box.max.y - size.y * 0.17
+  const dist = (size.y * 1.08) / (2 * Math.tan(fovRad / 2))
   camera.position.set(center.x, center.y, center.z + dist)
   camera.lookAt(center)
 

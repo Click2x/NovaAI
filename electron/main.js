@@ -102,6 +102,7 @@ function onSettingsChanged(before, now) {
   if (before.display.avatar !== now.display.avatar) applyAvatarVisible(now.display.avatar)
   if (before.display.chat !== now.display.chat) { if (now.display.chat) chatWindow.open(); else chatWindow.close() }
   if (before.display.chatSide !== now.display.chatSide) chatWindow.follow()
+  if (before.display.style !== now.display.style && win && !win.isDestroyed()) win.webContents.reloadIgnoringCache()      // the overlay builds the orb or the avatar once, at load
   buildTrayMenu()
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && w.webContents) w.webContents.send('settings-changed')
 }
@@ -332,7 +333,7 @@ const setupWindow = require('./onboarding').registerOnboarding({
   ipcMain, BrowserWindow, dialog, shell, screen, DEV,
   getBase: () => settingsLib.backendHttpUrl(eff(), process.env),
   getVrmName: () => path.basename(vrmFile()),
-  setAvatar: (file) => { updateSettings({ display: { vrm: file } }); if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache() },
+  setAvatar: (file) => { updateSettings({ display: { vrm: file, style: 'avatar' } }); if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache() },
   onFinish: () => { updateSettings({ app: { onboardingDone: true, onboardingDismissed: false }, display: { avatar: true } }) },
   onLater: () => { updateSettings({ app: { onboardingDismissed: true } }) },
   distDir: path.join(__dirname, '..', 'dist'),
@@ -360,6 +361,12 @@ function toggleChat() {
 }
 
 // display.avatar is the user's choice, saved; hiding keeps Nova running (voice, tray, notifications, the chat window).
+// The orb's diameter on the display the overlay is on (a percentage of that display's width).
+function orbPx() {
+  const d = win && !win.isDestroyed() ? screen.getDisplayMatching(win.getBounds()) : screen.getPrimaryDisplay()
+  return placement.orbDiameter(d.workArea, eff().display.orbPercent)
+}
+
 function toggleVisible() { updateSettings({ display: { avatar: !eff().display.avatar } }) }
 function applyAvatarVisible(visible) {
   if (!win) return
@@ -525,6 +532,7 @@ ipcMain.handle('get-config', () => {
     backend: settingsLib.backendWsUrl(e, process.env),   // NOVA_BACKEND (ws://...) still wins
     smokeUi: process.env.NOVA_SMOKE_UI || '',   // test hook: comma list of rate, react, drawer; the overlay clicks those controls itself
     backendHttp: settingsLib.backendHttpUrl(e, process.env),   // where the overlay loads pictures and video from
+    display: { style: e.display.style, orbPx: orbPx() },       // what she looks like on the desktop and how big the orb is on this screen
     autoSay: process.env.NOVA_SMOKE_SAY || null, // test hook: send this text once connected
     // Everything below comes from the settings file with env overrides on top (settings.js); the renderer re-reads it on 'settings-changed'.
     backendSettings: settingsLib.toBackend(e),   // the `settings` message for the backend

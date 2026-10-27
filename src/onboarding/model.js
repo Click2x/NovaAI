@@ -88,6 +88,12 @@ export function summary(settings) {
   return rows
 }
 
+// How far the orb swells for the sound that is playing: 0 (silence) .. 1, from the analyser's RMS. Quiet noise under the gate does nothing.
+export function orbLevel(rms) {
+  const v = Number.isFinite(rms) ? rms : 0
+  return Math.max(0, Math.min(1, (v - 0.01) * 8))
+}
+
 // Mouth reading speed for lines spoken without audio: about 15 characters a second, at least 1.2 s.
 export function readMs(text) {
   return Math.max(1200, Math.round(str(text).length * 66))

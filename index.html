@@ -94,6 +94,16 @@
       #radial .rbtn { position: absolute; width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; font-size: 19px; line-height: 1;
         border: 1px solid rgba(167, 139, 250, .7); background: rgba(30, 27, 46, .95); color: #f5f3ff; box-shadow: 0 3px 12px rgba(0,0,0,.45); pointer-events: auto; }
       #radial .rbtn:hover { background: rgba(91, 33, 182, .95); }
+      /* The orb (default look): a glowing sphere in the corner. Sized from settings by src/main.js; --orb is its diameter. It takes the mouse only where it is (overHot / alphaAt). */
+      #orb { display: none; position: fixed; right: 18px; bottom: 18px; width: 120px; height: 120px; border-radius: 50%; cursor: grab; will-change: transform; --tint: 139, 92, 246; --glow: 0; --hx: 35%; --hy: 30%;
+        background: radial-gradient(circle at var(--hx) var(--hy), rgba(255,255,255,.55), rgba(var(--tint), 1) 38%, rgba(var(--tint), .78) 72%, rgba(40, 20, 90, 1) 100%);
+        box-shadow: 0 0 calc(16px + var(--glow) * 60px) rgba(var(--tint), calc(.3 + var(--glow) * .5)); }
+      body.orb { --orb: 120px; }
+      body.orb #orb { display: block; }
+      body.orb #stage { display: none; }
+      body.orb #bubble { bottom: calc(var(--orb) + 36px); }
+      body.orb #chips { bottom: calc(var(--orb) + 8px); }
+      body.orb #actions { bottom: calc(var(--orb) + 26px); }
       #inputbox { position: fixed; left: 12px; right: 12px; bottom: 12px; display: none; }
       #inputbox.show { display: block; }
       #inputbox input { box-sizing: border-box; width: 100%; padding: 10px 14px; border-radius: 14px; outline: none;
@@ -102,6 +112,7 @@
   </head>
   <body>
     <canvas id="stage"></canvas>
+    <div id="orb" aria-label="Nova"></div>
     <div id="bubble"></div>
     <div id="chips"></div>
     <div id="inputbox"><input id="field" type="text" placeholder="Say something to Nova..." autocomplete="off" /></div>

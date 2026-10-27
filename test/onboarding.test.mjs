@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { initial, reduce, newInstallLines, progress, summary, readMs, STEPS, MAX_HISTORY } from '../src/onboarding/model.js'
+import { initial, reduce, newInstallLines, progress, summary, readMs, orbLevel, STEPS, MAX_HISTORY } from '../src/onboarding/model.js'
 import { createApi } from '../src/onboarding/api.js'
 import { createSpeaker } from '../src/onboarding/speaker.js'
 import { SECTIONS, getPath } from '../src/settings/fields.js'
@@ -77,6 +77,15 @@ test('reading time for lines spoken without audio', () => {
   assert.equal(readMs('Hi'), 1200)
   assert.equal(readMs('x'.repeat(150)), 9900)
   assert.equal(readMs(undefined), 1200)
+})
+
+test('the orb: silent under the gate, swells with volume, never past 1, junk is silence', () => {
+  assert.equal(orbLevel(0), 0)
+  assert.equal(orbLevel(0.009), 0)
+  assert.ok(orbLevel(0.05) > 0 && orbLevel(0.05) < 1)
+  assert.ok(orbLevel(0.08) > orbLevel(0.05))
+  assert.equal(orbLevel(0.5), 1)
+  for (const bad of [NaN, undefined, null, -1, 'x']) assert.equal(orbLevel(bad), 0, String(bad))
 })
 
 // ── api ──

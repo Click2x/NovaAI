@@ -19,14 +19,14 @@ const AVATAR = { x: 1500, y: 360, width: 420, height: 680 }      // WIN_W x WIN_
 
 // ── settings ──
 test('display defaults: avatar on, chat window off, automatic side', () => {
-  assert.deepEqual(S.DEFAULTS.display, { avatar: true, chat: false, chatSide: 'auto', vrm: '' })
+  assert.deepEqual(S.DEFAULTS.display, { avatar: true, chat: false, chatSide: 'auto', vrm: '', style: 'orb', orbPercent: 10 })
   assert.deepEqual(S.sanitize({ display: { avatar: 'no', chat: 1, chatSide: 'up' } }).display, S.DEFAULTS.display)
-  assert.deepEqual(S.applyPatch(S.DEFAULTS, { display: { avatar: false, chat: true, chatSide: 'right' } }).display, { avatar: false, chat: true, chatSide: 'right', vrm: '' })
+  assert.deepEqual(S.applyPatch(S.DEFAULTS, { display: { avatar: false, chat: true, chatSide: 'right' } }).display, { avatar: false, chat: true, chatSide: 'right', vrm: '', style: 'orb', orbPercent: 10 })
 })
 
 test('the Display rows exist and round-trip', () => {
   const sec = SECTIONS.find((s) => s.title === 'Display')
-  assert.deepEqual(sec.fields.map((f) => f.path), ['display.avatar', 'display.chat', 'display.vrm', 'display.chatSide'])
+  assert.deepEqual(sec.fields.map((f) => f.path), ['display.avatar', 'display.chat', 'display.style', 'display.orbPercent', 'display.vrm', 'display.chatSide'])
   for (const f of sec.fields) assert.notEqual(getPath(S.DEFAULTS, f.path), undefined)
   assert.equal(getPath(S.applyPatch(S.DEFAULTS, patchFor('display.avatar', false)), 'display.avatar'), false)
 })
