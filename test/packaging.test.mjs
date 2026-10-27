@@ -12,7 +12,7 @@ test('electron-builder config points at things that exist', () => {
   const b = pkg.build
   assert.ok(b, 'package.json has a build section')
   assert.ok(fs.existsSync(path.join(root, pkg.main)), 'main entry exists')
-  assert.equal(b.productName, 'Nova')
+  assert.equal(b.productName, 'Nova.Ai')
   assert.deepEqual(b.win.target, [{ target: 'nsis', arch: ['x64'] }])
   assert.equal(b.nsis.oneClick, false)
   assert.equal(b.publish, null)                                    // never tries to upload anything

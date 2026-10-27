@@ -7,3 +7,14 @@ release-nsis/
 .env.*
 settings.bad.json
 .agent-board/
+
+# Python backend
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+*.db
+*.sqlite
+backend/data/
+backend/.cache/

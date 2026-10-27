@@ -1,8 +1,8 @@
 {
-    "name":  "nova-desktop",
+    "name":  "novaai",
     "version":  "0.1.0",
     "private":  true,
-    "description":  "Nova desktop avatar app",
+    "description":  "Nova.Ai: a private, local AI companion for your desktop",
     "main":  "electron/main.js",
     "scripts":  {
                     "dev":  "concurrently -k -n vite,electron \"vite\" \"wait-on tcp:5174 \u0026\u0026 cross-env NOVA_DEV=1 electron .\"",
@@ -28,9 +28,9 @@
                             "wait-on":  "^8.0.0"
                         },
     "build":  {
-                  "appId":  "ai.nova.desktop",
-                  "productName":  "Nova",
-                  "executableName":  "Nova",
+                  "appId":  "ai.novaai.desktop",
+                  "productName":  "Nova.Ai",
+                  "executableName":  "NovaAI",
                   "directories":  {
                                       "output":  "release",
                                       "buildResources":  "build"
@@ -67,7 +67,7 @@
                                "perMachine":  false,
                                "allowToChangeInstallationDirectory":  true,
                                "deleteAppDataOnUninstall":  false,
-                               "shortcutName":  "Nova"
+                               "shortcutName":  "Nova.Ai"
                            },
                   "publish":  null,
                   "npmRebuild":  false

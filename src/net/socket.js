@@ -17,7 +17,7 @@ export function createSocket({ url, onEvent, onStatus, onAudio, onOpen }) {
     }
     ws.onopen = () => {
       attempt = 0
-      send({ type: 'hello', client: 'nova-desktop' })
+      send({ type: 'hello', client: 'novaai-desktop' })
       onStatus('online')
       onOpen && onOpen()
     }
