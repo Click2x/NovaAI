@@ -30,10 +30,10 @@ const DEV = process.env.NOVA_DEV === '1'
 const WIN_W = 420
 const WIN_H = 680
 const POLL_MS = 33
-// Packaged builds carry the model in resources/ (electron-builder extraResources); from source it is the repo's vrm_models folder.
+// Packaged builds carry the model in resources/ (electron-builder extraResources); from source it is assets/vrm in this repo.
 const DEFAULT_VRM = app.isPackaged
   ? path.join(process.resourcesPath, 'vrm', 'Nova_v1_grunge.vrm')
-  : path.resolve(__dirname, '..', '..', 'vrm_models', 'Nova_v1_grunge.vrm')
+  : path.resolve(__dirname, '..', 'assets', 'vrm', 'Nova_v1_grunge.vrm')
 const VRM_PATH = process.env.NOVA_VRM ? path.resolve(process.env.NOVA_VRM) : DEFAULT_VRM
 
 // Only this one file is ever served through nova-asset://, no path is taken from the URL.

@@ -220,7 +220,7 @@ test('opening Home again reuses the window and only changes the hash', async () 
 // ── settings additions ───────────────────────────────────────────────────────────
 test('new settings have defaults and sanitize', () => {
   assert.deepEqual(S.DEFAULTS.home, { url: 'auto' })
-  assert.deepEqual(S.DEFAULTS.backend, { url: 'http://127.0.0.1:8000', startScript: 'C:\\scripts\\start_nova.ps1', controlUrl: 'http://127.0.0.1:8765' })
+  assert.deepEqual(S.DEFAULTS.backend, { url: 'http://127.0.0.1:8000', startScript: '', controlUrl: 'http://127.0.0.1:8765' })
   assert.deepEqual(S.sanitize(S.DEFAULTS), S.DEFAULTS)
   const ok = S.sanitize({ home: { url: 'HTTP://127.0.0.1:5173/' }, backend: { url: 'http://10.0.0.5:9000/', startScript: ' D:\\n\\start.ps1 ', controlUrl: 'https://c.local/' } })
   assert.equal(ok.home.url, 'http://127.0.0.1:5173/')
@@ -448,14 +448,4 @@ test('main.js no longer has the event switch and subscribes to every event it us
   const src = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   assert.ok(!/switch \(m\.type\)/.test(src))
   for (const t of ['turn_start', 'sentence', 'turn_end', 'transcript', 'tool', 'capture_request', 'state', 'proactive', 'error']) assert.ok(src.includes(`events.on('${t}'`), t)
-})
-
-// ── the web app side of #panel= (frontend/src/utils/desktop.js) ─────────────────
-test('panelFromHash accepts known panel ids only', async () => {
-  const { panelFromHash, isDesktop } = await import(pathToFileURL(path.resolve(import.meta.dirname, '../../frontend/src/utils/desktop.js')).href)
-  assert.equal(panelFromHash('#panel=memory'), 'memory')
-  assert.equal(panelFromHash('#x=1&panel=notes'), 'notes')
-  assert.equal(panelFromHash('#panel=notes&x=1'), 'notes')
-  for (const bad of ['', '#', '#panel=', '#panel=graph', '#panel=../x', '#panel=MEMORY', '#panel=memory2', '#xpanel=memory', null, undefined]) assert.equal(panelFromHash(bad), null, String(bad))
-  assert.equal(isDesktop(), false)       // no window in node
 })

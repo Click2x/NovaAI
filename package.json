@@ -28,7 +28,7 @@
                             "wait-on":  "^8.0.0"
                         },
     "build":  {
-                  "appId":  "com.bryant.nova.desktop",
+                  "appId":  "ai.nova.desktop",
                   "productName":  "Nova",
                   "executableName":  "Nova",
                   "directories":  {
@@ -47,7 +47,7 @@
                                  ],
                   "extraResources":  [
                                          {
-                                             "from":  "../vrm_models/Nova_v1_grunge.vrm",
+                                             "from":  "assets/vrm/Nova_v1_grunge.vrm",
                                              "to":  "vrm/Nova_v1_grunge.vrm"
                                          }
                                      ],
@@ -72,5 +72,6 @@
                   "publish":  null,
                   "npmRebuild":  false
               },
-    "author":  "Bryant"
+    "author":  "Nova.Ai contributors",
+    "license":  "GPL-3.0-only"
 }

@@ -2,3 +2,7 @@ node_modules/
 dist/
 release/
 release-nsis/
+*.log
+.env
+.env.*
+settings.bad.json

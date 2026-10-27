@@ -63,7 +63,7 @@ export const SECTIONS = [
     { path: 'home.url', type: 'text', label: 'Home window address', placeholder: 'auto',
       hint: "auto = the backend's /app page if it answers, else the Vite dev server (127.0.0.1:5173). Or any http(s) address. Applies the next time Home opens." },
     { path: 'backend.url', type: 'text', label: 'Backend address', placeholder: 'http://127.0.0.1:8000', hint: 'Used for the connection, the health line and auto Home. Restart the app to reconnect elsewhere.' },
-    { path: 'backend.startScript', type: 'text', label: 'Start script', placeholder: 'C:\\scripts\\start_nova.ps1', hint: 'Run by the tray item "Start Nova services" (PowerShell, hidden). Never run automatically.' },
+    { path: 'backend.startScript', type: 'text', label: 'Start script', placeholder: 'path to your backend start script (optional)', hint: 'Run by the tray item "Start Nova services" (PowerShell, hidden). Never run automatically.' },
     { path: 'backend.controlUrl', type: 'text', label: 'Control page', placeholder: 'http://127.0.0.1:8765', hint: 'Opened by the tray item "Open control page".' },
   ] },
   { title: 'App', fields: [

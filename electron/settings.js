@@ -20,7 +20,7 @@ const DEFAULTS = Object.freeze({
   agent: { defaultMode: 'default', workspace: '' },   // P13 Code window: permission mode a new session starts in, and the folder it works in (also sent to the backend's ~/.nova/settings.json). bypass is never offered here: it needs bypassAllowed in that user file (roadmap D5)
   app: { autostart: false, updateFolder: '' },   // updateFolder: where newer 'Nova Setup x.y.z.exe' files are looked for (updates.js); empty = off
   home: { url: 'auto' },            // 'auto' = <backend.url>/app/ when it answers, else the Vite dev server (see home.js); or any http(s) URL
-  backend: { url: 'http://127.0.0.1:8000', startScript: 'C:\\scripts\\start_nova.ps1', controlUrl: 'http://127.0.0.1:8765' },
+  backend: { url: 'http://127.0.0.1:8000', startScript: '', controlUrl: 'http://127.0.0.1:8765' },
   models: { agentSwap: 'always', agentModel: '', chatReloadMinutes: 5 },   // GPU swap policy (roadmap D10), applied by the backend arbiter; agentModel '' = the backend's default
   proactive: { speak: 'off', quietEnabled: false, quietStart: '22:00', quietEnd: '08:00' },   // P8 (roadmap D12): say her own messages aloud? off by default; quiet hours silence and hide pop-ups (cards wait in the centre)
   display: { avatar: true, chat: false, chatSide: 'auto' },   // avatar: show the overlay at all (off = Nova keeps running, tray/hotkeys/chat window still work); chat: the chat window by her; chatSide: which side of the shared origin it opens on

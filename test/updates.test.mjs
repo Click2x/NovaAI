@@ -195,14 +195,3 @@ test('make-icon is deterministic and the ICO directory matches its frames', () =
   assert.equal(ico[6 + 16], 0)                                                  // 0 means 256
   assert.equal(ico.readUInt32LE(6 + 12), 6 + 32)                                // first frame starts after the directory
 })
-
-test('the start script is in the repo, drops A1111, has a dry run, and Ollama comes before the backend', () => {
-  const ps = fs.readFileSync(path.resolve(root, '..', 'scripts', 'start_nova.ps1'), 'utf8')
-  assert.match(ps, /\[switch\]\$DryRun/)
-  assert.match(ps, /SupportsShouldProcess/)
-  assert.doesNotMatch(ps, /7860|webui-user|stable-diffusion/i)
-  const at = (s) => ps.indexOf(s)
-  assert.ok(at("Step 'Ollama'") > 0 && at("Step 'Ollama'") < at("'WSL2 keep-alive'") && at("'WSL2 keep-alive'") < at("Step 'ComfyUI'") && at("Step 'ComfyUI'") < at("Step 'Backend'") && at("Step 'Backend'") < at("Step 'Web UI'"))
-  const shim = fs.readFileSync(path.resolve(root, '..', 'scripts', 'shim', 'start_nova.shim.ps1'), 'utf8')
-  assert.match(shim, /start_nova\.ps1/)
-})
