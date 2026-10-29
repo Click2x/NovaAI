@@ -229,3 +229,102 @@ def test_a_new_message_interrupts_the_running_turn(make_core):
         ws_send(ws, "interrupt", turn_id="one")
         events = ws_recv_until(ws, "turn_end")
         assert events[-1]["interrupted"] is True and events[-1]["turn_id"] == "one"
+
+
+def utterance(turn_id, purpose, ms=1000, **over):
+    head = json.dumps({"v": 1, "kind": "utterance", "turn_id": turn_id, "purpose": purpose, "sr": 16000, "fmt": "s16le", **over}).encode()
+    return struct.pack("<I", len(head)) + head + b"\x01\x00" * (16 * ms)
+
+
+class Ear:
+    """A speech recognizer that 'hears' scripted sentences, one per utterance."""
+
+    def __init__(self, *heard):
+        self.heard = list(heard)
+
+    def available(self):
+        return True
+
+    def transcribe_pcm16(self, pcm, language=None):
+        return self.heard.pop(0)
+
+
+def test_voice_in_wake_word_with_a_command_starts_a_turn_under_the_utterance_id(make_core):
+    core = make_core(replies=["It is noon. Plenty of time left today."])
+    core.stt = Ear("Nova, what time is it?")
+    with Live(core) as c, c.ws() as ws:
+        ws_send(ws, "settings", tts=False)
+        recv_json(ws)
+        ws.send(utterance("v1", "wake"))
+        events = ws_recv_until(ws, "turn_end")
+        t = events[0]
+        assert t["type"] == "transcript" and t["turn_id"] == "v1" and t["keyword"] == "wake" and t["command"] == "what time is it?"
+        assert t["audio_ms"] == 1000 and t["ignored"] == ""
+        assert events[-1]["turn_id"] == "v1" and any(e["type"] == "sentence" for e in events)
+        user_msgs = [m["content"] for m in core.llm.calls[0]["messages"] if m["role"] == "user"]
+        assert user_msgs[-1] == "what time is it?"          # her name was dropped before the model saw it
+
+
+def test_voice_in_wake_word_alone_and_no_wake_word_start_nothing(make_core):
+    core = make_core()
+    core.stt = Ear("Hey Nova", "what time is it")
+    with Live(core) as c, c.ws() as ws:
+        ws.send(utterance("a", "wake"))
+        t = recv_json(ws)
+        assert (t["type"], t["keyword"], t["command"]) == ("transcript", "wake", "")
+        ws.send(utterance("b", "wake"))
+        t = recv_json(ws)
+        assert t["ignored"] == "no_wake_word"
+        ws_send(ws, "ping")
+        assert recv_json(ws)["type"] == "pong"
+        assert core.llm.calls == []
+
+
+def test_voice_in_stop_word_cancels_the_running_turn(make_core):
+    core = make_core(replies=["First reply is here, and it keeps going on a bit. Second sentence follows right after it."])
+    orig = core.llm.chat
+
+    async def slow_chat(*a, **k):
+        async for chunk in orig(*a, **k):
+            await asyncio.sleep(0.05)
+            yield chunk
+
+    core.llm.chat = slow_chat
+    core.stt = Ear("stop")
+    with Live(core) as c, c.ws() as ws:
+        ws_send(ws, "settings", tts=False)
+        recv_json(ws)
+        ws_send(ws, "user_text", turn_id="one", text="tell me a story")
+        assert recv_json(ws)["type"] == "turn_start"
+        ws.send(utterance("s1", "keyword"))
+        events = ws_recv_until(ws, "turn_end")
+        assert any(e["type"] == "transcript" and e["keyword"] == "stop" for e in events)
+        assert events[-1]["interrupted"] is True
+
+
+def test_voice_in_without_a_recognizer_says_so_once(make_core):
+    core = make_core()          # the test core has no speech recognizer
+    with Live(core) as c, c.ws() as ws:
+        ws.send(utterance("x1", "command"))
+        first = [recv_json(ws), recv_json(ws)]
+        assert {m["type"] for m in first} == {"error", "transcript"}
+        assert next(m for m in first if m["type"] == "error")["code"] == "stt_unavailable"
+        assert next(m for m in first if m["type"] == "transcript")["ignored"] == "stt_unavailable"
+        ws.send(utterance("x2", "command"))
+        second = recv_json(ws)
+        assert second["type"] == "transcript" and second["ignored"] == "stt_unavailable"      # no second error
+
+
+def test_voice_in_rejects_bad_audio_and_garbage_frames(make_core):
+    core = make_core()
+    core.stt = Ear("should never be asked")
+    with Live(core) as c, c.ws() as ws:
+        ws.send(utterance("t", "command", ms=50))
+        assert recv_json(ws)["ignored"] == "bad_audio"
+        ws.send(utterance("r", "command", sr=44100))
+        assert recv_json(ws)["ignored"] == "bad_audio"
+        ws.send(b"\xff\xff\xff\xffgarbage")
+        ws.send(b"")
+        ws_send(ws, "ping")
+        assert recv_json(ws)["type"] == "pong"
+        assert core.stt.heard == ["should never be asked"]

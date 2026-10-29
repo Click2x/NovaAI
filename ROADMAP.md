@@ -25,7 +25,7 @@ Goal: nothing about the first hour feels sketchy.
 
 - [ ] Code-sign the installer and `novaai-server.exe` (unsigned means SmartScreen and Defender warnings)
 - [ ] Voice in the bundle: decide between system voice only, an optional "download her voice" step (Kokoro as a separate pack), or a lighter TTS that needs no torch
-- [ ] Speech-to-text over the desktop WebSocket (not built; the mic step relies on it)
+- [?] Speech-to-text over the desktop WebSocket: utterances are transcribed, wake/stop/sleep words and commands handled (backend/novaai/voicein.py, ws.py; 18 new backend tests). Not heard live. The sidecar leaves out faster-whisper, so the bundled build says it cannot hear until the voice pack decision is made
 - [?] Orb while a real reply is spoken, drag, right-click radial, style switch at runtime
 - [ ] Persona and memory screens (listed as not built in the backend handoff)
 - [ ] Uninstall story: what is kept in `~/.novaai` and the app data folder, and a way to delete it

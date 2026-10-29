@@ -221,6 +221,7 @@ async function boot() {
   })
   events.on('error', (m) => {
     if (m.code === 'tts_failed') { pacer.release(m.turn_id); return }      // text only from here: show what is waiting for audio
+    if (m.code === 'stt_unavailable') { bubble.say("I can't hear you yet: speech recognition isn't installed on my backend. You can still type to me."); return }
     if (m.code === 'history_failed') drawer.failed()
     bubble.say('Something went wrong: ' + m.message)
   })

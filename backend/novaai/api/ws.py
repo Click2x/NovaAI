@@ -2,7 +2,10 @@
 
 client -> server: hello, settings{tts,voice,speed,...}, user_text{turn_id,text}, interrupt{turn_id}, history{before_id,limit}, ping, catchup,
                   feedback / react (acknowledged), presence / window / screen / playback (accepted and ignored)
+                  and BINARY utterances: [u32 LE header_len][JSON {v,kind:"utterance",turn_id,purpose,sr:16000,fmt:"s16le"}][int16 PCM]
 server -> client: hello_ack{server,protocol,features,backend_version}, turn_start, sentence{turn_id,sentence_id,text,emotion},
+                  transcript{turn_id,purpose,text,keyword,command,ignored,stt_ms,audio_ms} for every utterance (see voicein.py); a command, or her
+                  name followed by one, then starts a turn under that turn_id,
                   turn_end{turn_id,message_id,interrupted,metrics}, history{messages,has_more,before_id}, catchup, pong, error{code,message}
                   and, when speech is on and available, BINARY frames: [u32 LE header_len][JSON header][int16 PCM] per sentence.
 """
@@ -12,12 +15,12 @@ import asyncio
 import json
 import struct
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from .. import PROTOCOL, __version__
+from .. import PROTOCOL, __version__, voicein
 from ..core import Core
 from ..engine import converse
 
@@ -53,6 +56,9 @@ class Conn:
     speed: float = 0.0
     task: asyncio.Task | None = None
     turn_id: str = ""
+    stt_warned: bool = False
+    stt_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    utterances: set = field(default_factory=set)      # running utterance tasks, so none is garbage-collected mid-flight
 
     async def send(self, type_: str, **fields: Any) -> None:
         await self.ws.send_text(json.dumps({"v": PROTOCOL, "type": type_, **fields}))
@@ -101,6 +107,52 @@ class Conn:
             except Exception:
                 pass
 
+    async def start_turn(self, turn_id: str, text: str) -> None:
+        await self.cancel()
+        self.turn_id = turn_id
+        self.task = asyncio.create_task(self.run_turn(turn_id, text))
+
+    async def utterance(self, frame: bytes) -> None:
+        """A binary frame from the app's voice-activity detector: [u32 LE header_len][JSON header][int16 PCM, 16 kHz mono].
+        Answers with a `transcript` message; when it was a command (or her name followed by one) the turn starts under the same turn_id."""
+        try:
+            n = struct.unpack("<I", frame[:4])[0]
+            head = json.loads(frame[4:4 + n])
+            pcm = frame[4 + n:]
+        except (struct.error, ValueError):
+            return
+        if not isinstance(head, dict) or head.get("kind") != "utterance" or head.get("v") != PROTOCOL:
+            return
+        turn_id = str(head.get("turn_id") or f"v{int(time.time() * 1000)}")[:40]
+        purpose = head.get("purpose") if head.get("purpose") in voicein.PURPOSES else "command"
+        audio_ms = int(len(pcm) / 2 / 16000 * 1000)
+        reply = {"turn_id": turn_id, "purpose": purpose, "audio_ms": audio_ms}
+        if head.get("fmt") != "s16le" or head.get("sr") != 16000 or audio_ms < voicein.MIN_UTTERANCE_MS or audio_ms > voicein.MAX_UTTERANCE_S * 1000:
+            await self.send("transcript", text="", ignored="bad_audio", stt_ms=0, **reply)
+            return
+        stt = self.core.stt
+        if not (stt and stt.available()):
+            if not self.stt_warned:      # once per connection: the app keeps cutting speech out whether or not anything can read it
+                self.stt_warned = True
+                await self.send("error", code="stt_unavailable", message="Speech recognition is not installed on this backend (pip install faster-whisper).")
+            await self.send("transcript", text="", ignored="stt_unavailable", stt_ms=0, **reply)
+            return
+        started = time.monotonic()
+        try:
+            async with self.stt_lock:        # one at a time, in the order they were spoken
+                text = await asyncio.to_thread(stt.transcribe_pcm16, pcm)
+        except Exception as e:
+            await self.send("error", turn_id=turn_id, code="stt_failed", message=str(e)[:160])
+            await self.send("transcript", text="", ignored="stt_failed", stt_ms=int((time.monotonic() - started) * 1000), **reply)
+            return
+        heard = voicein.interpret(purpose, text)
+        await self.send("transcript", text=heard.text, keyword=heard.keyword, command=heard.command, ignored=heard.ignored,
+                        stt_ms=int((time.monotonic() - started) * 1000), **reply)
+        if heard.keyword in ("stop", "sleep"):
+            await self.cancel()
+        elif heard.starts_turn:
+            await self.start_turn(turn_id, heard.prompt[:4000])
+
     async def cancel(self) -> None:
         if self.task and not self.task.done():
             self.task.cancel()
@@ -126,9 +178,7 @@ class Conn:
         elif t == "user_text":
             text = str(data.get("text", "")).strip()[:4000]
             if text:
-                await self.cancel()
-                self.turn_id = str(data.get("turn_id") or f"t{int(time.time() * 1000)}")[:40]
-                self.task = asyncio.create_task(self.run_turn(self.turn_id, text))
+                await self.start_turn(str(data.get("turn_id") or f"t{int(time.time() * 1000)}")[:40], text)
         elif t == "interrupt":
             if not data.get("turn_id") or data.get("turn_id") == self.turn_id:
                 await self.cancel()
@@ -164,7 +214,11 @@ async def desktop_ws(ws: WebSocket) -> None:
             msg = await ws.receive()
             if msg.get("type") == "websocket.disconnect":
                 break
-            if msg.get("text") is None:        # binary utterances: speech-to-text over this socket is not part of this server yet
+            if msg.get("text") is None:        # a binary utterance: transcribed in its own task so the socket keeps answering (stop, ping, ...)
+                if msg.get("bytes"):
+                    task = asyncio.create_task(conn.utterance(msg["bytes"]))
+                    conn.utterances.add(task)
+                    task.add_done_callback(conn.utterances.discard)
                 continue
             try:
                 data = json.loads(msg["text"])
@@ -175,4 +229,6 @@ async def desktop_ws(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
+        for t in list(conn.utterances):
+            t.cancel()
         await conn.cancel()
