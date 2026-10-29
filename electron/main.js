@@ -240,6 +240,14 @@ services.registerServices({
   smokeLog: (line) => smokeLogLine(line),
 })
 
+// The backend the installer carries (electron/sidecar.js): started at launch when nothing answers on this machine, stopped on quit.
+const sidecar = require('./sidecar').createSidecar({
+  spawn, fs,
+  check: async () => (await services.fetchHealth(settingsLib.backendHttpUrl(eff(), process.env))).online,
+  logFile: path.join(app.getPath('userData'), 'logs', 'backend.log'),
+  smokeLog: (line) => smokeLogLine(line),
+})
+
 // P9 tray GPU submenu (what is loaded, what holds the card, Free GPU / Load chat model); loopback backend only
 const gpuTray = require('./gpu').registerGpu({ registerTraySection, getBase: () => settingsLib.backendHttpUrl(eff(), process.env), isBackendOnline: () => !!(health && health.online) || netState.status === 'online', rebuildTray: buildTrayMenu })
 
@@ -421,7 +429,13 @@ app.whenReady().then(() => {
   if (initial.display.chat) chatWindow.open()
   if (!process.env.NOVA_SMOKE && !process.env.NOVA_SMOKE_HOME && !process.env.NOVA_SMOKE_CODE) {
     const onboarding = require('./onboarding')
-    onboarding.probeBackend(settingsLib.backendHttpUrl(eff(), process.env)).then((b) => {
+    sidecar.ensure({
+      resourcesPath: process.resourcesPath, appRoot: path.join(__dirname, '..'),
+      httpUrl: settingsLib.backendHttpUrl(eff(), process.env), startScript: eff().backend.startScript,
+    }).catch(() => false).then(() => {
+      healthPoller.refresh()
+      return onboarding.probeBackend(settingsLib.backendHttpUrl(eff(), process.env))
+    }).then((b) => {
       smokeLogLine(`setup probe reachable=${b.reachable} supported=${b.supported} done=${b.done}`)
       if (onboarding.shouldAutoOpen(b, eff().app)) setupWindow.open()
     })
@@ -666,5 +680,5 @@ function replaceWindow() {
   smokeLogLine(`placed on display ${display.id} at ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height} (scale ${display.scaleFactor})`)
 }
 
-app.on('will-quit', () => { saveSettingsNow(); healthPoller.stop(); gpuTray.stop(); globalShortcut.unregisterAll(); clearInterval(pollTimer); if (tracker) tracker.stop() })
+app.on('will-quit', () => { sidecar.stop(); saveSettingsNow(); healthPoller.stop(); gpuTray.stop(); globalShortcut.unregisterAll(); clearInterval(pollTimer); if (tracker) tracker.stop() })
 app.on('window-all-closed', () => app.quit())

@@ -16,14 +16,17 @@ test('electron-builder config points at things that exist', () => {
   assert.deepEqual(b.win.target, [{ target: 'nsis', arch: ['x64'] }])
   assert.equal(b.nsis.oneClick, false)
   assert.equal(b.publish, null)                                    // never tries to upload anything
-  for (const r of b.extraResources || []) assert.ok(fs.existsSync(path.resolve(root, r.from)), r.from)
+  // the bundled backend is a build output (tools/build-backend.ps1); `npm run dist` makes it before electron-builder runs
+  for (const r of b.extraResources || []) assert.ok(r.from === 'backend/dist/novaai-server' || fs.existsSync(path.resolve(root, r.from)), r.from)
+  assert.ok(fs.existsSync(path.join(root, 'backend', 'novaai-server.spec')) && fs.existsSync(path.join(root, 'tools', 'build-backend.ps1')))
+  assert.match(pkg.scripts.dist, /build:backend.*electron-builder/)   // the installer is never built without the backend
   assert.ok(b.files.includes('electron/**/*') && b.files.includes('dist/**/*'))
   assert.ok(b.asarUnpack.includes('node_modules/get-windows/**'))   // get-windows runs a helper binary, it cannot live inside the asar
   assert.ok(fs.existsSync(path.join(root, 'node_modules', 'get-windows', 'main')) || !fs.existsSync(path.join(root, 'node_modules', 'get-windows')))
 })
 
-test('no avatar model ships with the app: nothing is packaged, and .vrm files stay out of git', () => {
-  assert.equal(pkg.build.extraResources, undefined)
+test('no avatar model ships with the app: only the backend is packaged, and .vrm files stay out of git', () => {
+  assert.deepEqual((pkg.build.extraResources || []).map((r) => r.to), ['backend/novaai-server'])
   assert.doesNotMatch(main, /resourcesPath, 'vrm'/)
   assert.match(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), /^\*\.vrm$/m)
 })

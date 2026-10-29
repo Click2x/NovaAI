@@ -17,6 +17,8 @@ venv/
 *.db
 *.sqlite
 backend/data/
+backend/build/
+backend/.build-venv/
 backend/.cache/
 
 # Avatar models are the user's own, never committed
