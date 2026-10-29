@@ -8,6 +8,7 @@ export const MAX_HISTORY = 80
 export function initial() {
   return {
     phase: 'boot',            // boot | offline | ready
+    backend: { state: 'none', reason: '', logFile: '' },   // the bundled backend's status, for the offline panel
     status: null,             // the backend's /api/onboarding
     settings: null,           // the backend's /api/settings (what she has learned)
     plan: null,               // models she intends to use ({voice, tools, download, download_gb})
@@ -29,7 +30,7 @@ const str = (v) => (typeof v === 'string' ? v : '')
 
 export function reduce(s, a) {
   switch (a.type) {
-    case 'offline': return { ...s, phase: 'offline', busy: false }
+    case 'offline': return { ...s, phase: 'offline', busy: false, backend: a.backend || s.backend }
     case 'status': return { ...s, phase: 'ready', status: a.status, error: '' }
     case 'settings': return { ...s, settings: a.settings }
     case 'plan': return { ...s, plan: a.plan }

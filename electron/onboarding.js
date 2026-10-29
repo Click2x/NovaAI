@@ -74,8 +74,13 @@ function centeredBounds(workArea, size, margin = 24) {
   return { x: Math.round(workArea.x + (workArea.width - width) / 2), y: Math.round(workArea.y + (workArea.height - height) / 2), width, height }
 }
 
-function pageConfig({ httpBase, vrmName }) {
-  return { httpBase: String(httpBase).replace(/\/+$/, ''), vrmName: vrmName || '' }
+// `backend` is the bundled backend's status ({ state, reason, logFile }); the page uses it to say why it cannot reach one.
+function pageConfig({ httpBase, vrmName, backend }) {
+  const b = backend && typeof backend === 'object' ? backend : {}
+  return {
+    httpBase: String(httpBase).replace(/\/+$/, ''), vrmName: vrmName || '',
+    backend: { state: ['starting', 'online', 'failed'].includes(b.state) ? b.state : 'none', reason: String(b.reason || '').slice(0, 300), logFile: String(b.logFile || '') },
+  }
 }
 
 function allowNavigation(url, ownPrefix) {
@@ -86,12 +91,12 @@ const WINDOW_SIZE = { width: 560, height: 800 }
 
 // deps: { ipcMain, BrowserWindow, dialog, shell, screen, DEV, getBase(), getVrmName(), setAvatar(file) -> void, onFinish(), onLater(), distDir, preload }
 function registerOnboarding(deps) {
-  const { ipcMain, BrowserWindow, dialog, shell, screen, DEV, getBase, getVrmName, setAvatar, onFinish, onLater, distDir, preload } = deps
+  const { ipcMain, BrowserWindow, dialog, shell, screen, DEV, getBase, getVrmName, getBackend = () => null, setAvatar, onFinish, onLater, distDir, preload } = deps
   let win = null
   const alive = () => !!win && !win.isDestroyed()
   const mine = (e) => alive() && e.sender === win.webContents
 
-  ipcMain.handle(CONFIG, (e) => (mine(e) ? pageConfig({ httpBase: getBase(), vrmName: getVrmName() }) : null))
+  ipcMain.handle(CONFIG, (e) => (mine(e) ? pageConfig({ httpBase: getBase(), vrmName: getVrmName(), backend: getBackend() }) : null))
   ipcMain.handle(PICK, async (e) => {
     if (!mine(e)) return { ok: false, error: 'Not allowed.' }
     const r = await dialog.showOpenDialog(win, { title: 'Choose an avatar', properties: ['openFile'], filters: [{ name: 'VRM avatar', extensions: ['vrm'] }] })

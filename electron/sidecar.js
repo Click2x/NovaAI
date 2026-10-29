@@ -65,25 +65,59 @@ async function waitUntilOnline({ check, stopped = () => false, sleep = (ms) => n
   return false
 }
 
-// Own the child for the life of the app. deps: { spawn, fs, check (async -> bool), logFile, smokeLog }
-function createSidecar({ spawn, fs, check, logFile, smokeLog = () => {} }) {
+// Can we listen on host:port right now? (A port held by something that is not Nova's backend makes the exe exit with a bind error.)
+function isPortFree(host, port, net = require('net')) {
+  return new Promise((resolve) => {
+    const srv = net.createServer()
+    srv.once('error', () => resolve(false))
+    srv.listen({ host, port }, () => srv.close(() => resolve(true)))
+  })
+}
+
+// The preferred port if free, else the next free one above it (up to `tries` ports), else null.
+async function pickPort(host, preferred, { isFree = isPortFree, tries = 50 } = {}) {
+  for (let p = preferred; p < preferred + tries && p < 65536; p++) if (await isFree(host, p)) return p
+  return null
+}
+
+const httpUrlFor = (target) => `http://${target.host.includes(':') ? `[${target.host}]` : target.host}:${target.port}`
+
+// Own the child for the life of the app. deps: { spawn, fs, check (async -> bool), logFile, smokeLog, isFree, onRelocate(httpUrl) }
+// status() is { state: 'none' | 'starting' | 'online' | 'failed', reason?, logFile } for the setup window to explain itself.
+function createSidecar({ spawn, fs, check, logFile, smokeLog = () => {}, isFree = isPortFree, onRelocate = () => {} }) {
   let child = null
   let quitting = false
+  let state = 'none'
+  let reason = ''
+  const fail = (why) => { state = 'failed'; reason = why; smokeLog(`sidecar failed: ${why}`); return false }
   return {
     // Returns true when a backend answers (ours or not) once this settles; false when none could be started or it never came up.
     async ensure({ resourcesPath, appRoot, httpUrl, startScript }) {
       const exe = sidecarPath({ resourcesPath, appRoot, fs })
       const d = decide({ exe, httpUrl, startScript, online: await check() })
-      if (!d.start) { smokeLog(`sidecar not started: ${d.reason}`); return d.reason === 'a backend already answers' }
-      const r = startSidecar(exe, d.target, logFile, { spawn, fs })
-      if (!r.ok) { smokeLog(`sidecar failed: ${r.reason}`); return false }
+      if (!d.start) { smokeLog(`sidecar not started: ${d.reason}`); if (d.reason === 'a backend already answers') state = 'none'; return d.reason === 'a backend already answers' }
+      let target = d.target
+      if (!(await isFree(target.host, target.port))) {
+        // Something that is not our backend holds the port (a healthy backend would have answered above): use the next free one.
+        const port = await pickPort(target.host, target.port + 1, { isFree: (h, p) => isFree(h, p) })
+        if (!port) return fail(`port ${target.port} is in use and no free port was found nearby`)
+        smokeLog(`sidecar: port ${target.port} is in use, using ${port}`)
+        target = { ...target, port }
+        onRelocate(httpUrlFor(target))
+      }
+      state = 'starting'; reason = ''
+      const r = startSidecar(exe, target, logFile, { spawn, fs })
+      if (!r.ok) return fail(r.reason)
       child = r.child
-      child.on('exit', () => { child = null })
+      let exitCode = null
+      child.on('exit', (code) => { exitCode = code; child = null })
       smokeLog(`sidecar started pid=${child.pid}`)
       const up = await waitUntilOnline({ check, stopped: () => quitting || !child })
-      smokeLog(`sidecar ${up ? 'online' : 'did not come up'}`)
-      return up
+      if (up) { state = 'online'; smokeLog('sidecar online'); return true }
+      if (quitting) return false
+      return fail(exitCode !== null ? `it stopped right after starting (exit code ${exitCode})` : 'it did not answer in time')
     },
+    status: () => ({ state, reason, logFile }),
     stop() {
       quitting = true
       if (child) { try { child.kill() } catch {} child = null }
@@ -92,4 +126,4 @@ function createSidecar({ spawn, fs, check, logFile, smokeLog = () => {} }) {
   }
 }
 
-module.exports = { sidecarPath, loopbackTarget, decide, startSidecar, waitUntilOnline, createSidecar, EXE }
+module.exports = { sidecarPath, loopbackTarget, decide, startSidecar, waitUntilOnline, createSidecar, isPortFree, pickPort, httpUrlFor, EXE }

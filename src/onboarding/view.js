@@ -50,12 +50,28 @@ export function createView(root, A) {
   }
 
   function offlinePanel(s) {
+    const b = s.backend || {}
+    const again = h('div', { class: 'row' }, button('Look again', () => A.tryAgain(), { primary: true }))
+    if (b.state === 'failed') {
+      return h('div', { class: 'card' },
+        h('h2', { text: "My built-in backend would not start" }),
+        h('p', { text: b.reason ? `The reason: ${b.reason}.` : 'It stopped before it was ready.' }),
+        h('p', { class: 'hint', text: 'Security software sometimes blocks it. Allowing NovaAI and novaai-server.exe and then looking again usually fixes that.' }),
+        b.logFile ? h('p', { class: 'hint', text: `Its log: ${b.logFile}` }) : null,
+        again)
+    }
+    if (b.state === 'starting') {
+      return h('div', { class: 'card' },
+        h('h2', { text: 'Waking up my backend' }),
+        h('p', { text: 'The first start takes a little while. I will carry on the moment it answers.' }),
+        again)
+    }
     return h('div', { class: 'card' },
       h('h2', { text: "I can't reach my backend" }),
       h('p', { text: 'I need a small program running on this computer to think with. Open a terminal in the Nova.Ai folder and start it:' }),
       h('pre', { class: 'code', text: 'cd backend\npip install -r requirements.txt\npython -m novaai serve' }),
       h('p', { class: 'hint', text: 'I will keep looking, and carry on the moment I find it.' }),
-      h('div', { class: 'row' }, button('Look again', () => A.tryAgain(), { primary: true })))
+      again)
   }
 
   function planCard(s) {
@@ -161,7 +177,8 @@ export function createView(root, A) {
       laterBtn.hidden = s.phase === 'ready' && s.status && s.status.step === 'done'
       if (s.phase === 'boot') { panel.textContent = ''; panelKey = 'boot'; return }
       if (s.phase === 'offline') {
-        if (panelKey !== 'offline') { panel.textContent = ''; panel.append(offlinePanel(s)); panelKey = 'offline' }
+        const key = 'offline:' + ((s.backend && s.backend.state) || 'none') + ':' + ((s.backend && s.backend.reason) || '')
+        if (panelKey !== key) { panel.textContent = ''; panel.append(offlinePanel(s)); panelKey = key }
         dots.textContent = ''
         return
       }

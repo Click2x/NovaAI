@@ -106,8 +106,10 @@ async function main() {
     return st
   }
 
-  function goOffline() {
-    dispatch({ type: 'offline' })
+  async function goOffline() {
+    let backend
+    try { backend = (await shell.config()).backend } catch {}   // the app may have started or failed the bundled backend since the page loaded
+    dispatch({ type: 'offline', backend })
     clearTimeout(offlineTimer)
     offlineTimer = setTimeout(async () => { if (state.phase === 'offline') { if (await refresh()) resume() } }, 3000)
   }

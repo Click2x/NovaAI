@@ -291,7 +291,7 @@ test('the setup window is created once, sandboxed, and only talks to its own pag
   assert.equal(api.open(), w)
   assert.equal(f.wins.length, 1)
   assert.deepEqual([w.o.webPreferences.sandbox, w.o.webPreferences.nodeIntegration, w.o.webPreferences.contextIsolation], [true, false, true])
-  assert.deepEqual(await f.handlers['onboarding-config']({ sender: w.webContents }), { httpBase: 'http://127.0.0.1:8000', vrmName: 'Nova_v1_grunge.vrm' })
+  assert.deepEqual(await f.handlers['onboarding-config']({ sender: w.webContents }), { httpBase: 'http://127.0.0.1:8000', vrmName: 'Nova_v1_grunge.vrm', backend: { state: 'none', reason: '', logFile: '' } })
   assert.equal(await f.handlers['onboarding-config']({ sender: {} }), null)
   assert.equal(await f.handlers['onboarding-open-external']({ sender: {} }, 'https://ollama.com/download'), false)
   assert.equal(await f.handlers['onboarding-open-external']({ sender: w.webContents }, 'https://ollama.com/download'), true)
@@ -354,4 +354,18 @@ test('settings: onboarding flags and the custom avatar path', () => {
   assert.equal(S.applyPatch(S.sanitize({ display: { vrm: 'C:\\a.vrm' } }), { display: { vrm: '' } }).display.vrm, '')
   const row = SECTIONS.flatMap((s) => s.fields).find((f) => f.path === 'display.vrm')
   assert.ok(row && getPath(S.DEFAULTS, 'display.vrm') === '')
+})
+
+test('pageConfig carries the bundled backend status, cleaned', async () => {
+  const { pageConfig } = (await import('node:module')).createRequire(import.meta.url)('../electron/onboarding.js')
+  assert.deepEqual(pageConfig({ httpBase: 'http://127.0.0.1:8000/' }).backend, { state: 'none', reason: '', logFile: '' })
+  const c = pageConfig({ httpBase: 'http://x/', backend: { state: 'failed', reason: 'exit code 3', logFile: 'C:\l.log' } })
+  assert.deepEqual(c.backend, { state: 'failed', reason: 'exit code 3', logFile: 'C:\l.log' })
+  assert.equal(pageConfig({ httpBase: 'x', backend: { state: 'bogus' } }).backend.state, 'none')
+})
+
+test('the offline action keeps the backend status it is given', () => {
+  const s = reduce(initial(), { type: 'offline', backend: { state: 'failed', reason: 'r', logFile: 'l' } })
+  assert.equal(s.backend.state, 'failed')
+  assert.equal(reduce(s, { type: 'offline' }).backend.state, 'failed')
 })

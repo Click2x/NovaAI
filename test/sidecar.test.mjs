@@ -60,7 +60,7 @@ test('createSidecar leaves a running backend alone, starts a missing one and kil
   const mk = (online) => {
     let up = online
     const child = { pid: 9, killed: false, on() {}, kill() { this.killed = true } }
-    const s = sc.createSidecar({ fs: fsWith([exe]), spawn: () => { spawned++; up = true; return child }, check: async () => up, logFile: 'log' })
+    const s = sc.createSidecar({ fs: fsWith([exe]), spawn: () => { spawned++; up = true; return child }, check: async () => up, logFile: 'log', isFree: async () => true })
     return { s, child }
   }
   const a = mk(true)
@@ -73,4 +73,47 @@ test('createSidecar leaves a running backend alone, starts a missing one and kil
   b.s.stop()
   assert.equal(b.child.killed, true)
   assert.equal(b.s.running(), false)
+})
+
+test('pickPort takes the preferred port, else the next free one, else null', async () => {
+  assert.equal(await sc.pickPort('h', 8000, { isFree: async () => true }), 8000)
+  assert.equal(await sc.pickPort('h', 8000, { isFree: async (_h, p) => p >= 8003 }), 8003)
+  assert.equal(await sc.pickPort('h', 8000, { isFree: async () => false, tries: 5 }), null)
+  assert.equal(sc.httpUrlFor({ host: '::1', port: 8001 }), 'http://[::1]:8001')
+})
+
+test('a busy port moves the sidecar to a free one and tells the app', async () => {
+  const exe = path.join('R', 'backend', 'novaai-server', sc.EXE)
+  let call, moved
+  let up = false
+  const child = { pid: 1, on() {}, kill() {} }
+  const s = sc.createSidecar({
+    fs: fsWith([exe]), check: async () => up, logFile: 'log', onRelocate: (u) => { moved = u },
+    isFree: async (_h, p) => p !== 8000, spawn: (...a) => { call = a; up = true; return child },
+  })
+  assert.equal(await s.ensure({ resourcesPath: 'R', httpUrl: 'http://127.0.0.1:8000', startScript: '' }), true)
+  assert.equal(moved, 'http://127.0.0.1:8001')
+  assert.deepEqual(call[1], ['serve', '--host', '127.0.0.1', '--port', '8001'])
+  assert.equal(s.status().state, 'online')
+})
+
+test('status explains a sidecar that exits at once, never answers, or has no free port', async () => {
+  const exe = path.join('R', 'backend', 'novaai-server', sc.EXE)
+  const opts = { resourcesPath: 'R', httpUrl: 'http://127.0.0.1:8000', startScript: '' }
+  // exits straight away
+  let onExit
+  const dying = { pid: 2, on: (ev, f) => { if (ev === 'exit') onExit = f }, kill() {} }
+  const a = sc.createSidecar({ fs: fsWith([exe]), check: async () => false, logFile: 'L', isFree: async () => true, spawn: () => { setTimeout(() => onExit(3), 0); return dying } })
+  assert.equal(await a.ensure(opts), false)
+  assert.equal(a.status().state, 'failed')
+  assert.match(a.status().reason, /exit code 3/)
+  assert.equal(a.status().logFile, 'L')
+  // no free port anywhere
+  const b = sc.createSidecar({ fs: fsWith([exe]), check: async () => false, logFile: 'L', isFree: async () => false, spawn: () => assert.fail('must not spawn') })
+  assert.equal(await b.ensure(opts), false)
+  assert.match(b.status().reason, /no free port/)
+  // nothing bundled: stays "none"
+  const c = sc.createSidecar({ fs: fsWith([]), check: async () => false, logFile: 'L', spawn: () => assert.fail('must not spawn') })
+  assert.equal(await c.ensure(opts), false)
+  assert.equal(c.status().state, 'none')
 })

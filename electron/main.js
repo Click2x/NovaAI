@@ -246,6 +246,7 @@ const sidecar = require('./sidecar').createSidecar({
   check: async () => (await services.fetchHealth(settingsLib.backendHttpUrl(eff(), process.env))).online,
   logFile: path.join(app.getPath('userData'), 'logs', 'backend.log'),
   smokeLog: (line) => smokeLogLine(line),
+  onRelocate: (url) => updateSettings({ backend: { url } }),   // the default port is taken by something else: remember the one we use
 })
 
 // P9 tray GPU submenu (what is loaded, what holds the card, Free GPU / Load chat model); loopback backend only
@@ -342,6 +343,7 @@ const setupWindow = require('./onboarding').registerOnboarding({
   ipcMain, BrowserWindow, dialog, shell, screen, DEV,
   getBase: () => settingsLib.backendHttpUrl(eff(), process.env),
   getVrmName: () => path.basename(vrmFile()),
+  getBackend: () => sidecar.status(),
   setAvatar: (file) => { updateSettings({ display: { vrm: file, style: 'avatar' } }); if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache() },
   onFinish: () => { updateSettings({ app: { onboardingDone: true, onboardingDismissed: false }, display: { avatar: true } }) },
   onLater: () => { updateSettings({ app: { onboardingDismissed: true } }) },

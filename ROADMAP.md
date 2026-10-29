@@ -11,11 +11,11 @@ Goal: a clean Windows machine goes from installer to a talking orb.
 - [x] Backend bundled as `novaai-server.exe` and started by the app
 - [x] `npm run dist` produces `release/Nova.Ai Setup 0.1.0.exe` (106 MB) containing `resources/backend/novaai-server` (built Oct 29; the installer itself has not been run yet)
 - [ ] Install on a clean Windows user or VM; run setup start to finish
-- [ ] Ollama: detect it in setup; if missing, say so plainly and link the installer (no silent installs)
+- [x] Ollama: setup already detects it and shows a "Get Ollama" / "I installed it" card (no silent installs)
 - [?] Real model download from setup (about 7 GB), with spoken progress, resume after a failed or cancelled download
 - [?] Microphone "meet you" step, avatar picker, safety step clicks, finish
-- [ ] Sidecar failure path: if the exe will not start (port taken, antivirus blocked), setup shows the reason and where `logs/backend.log` is
-- [ ] Port conflict: pick a free port instead of assuming 8000
+- [x] Sidecar failure path: if the exe exits or never answers, setup shows the reason and where `logs/backend.log` is (unit-tested; not seen live)
+- [x] Port conflict: if 8000 is held by something else, the sidecar uses the next free port and remembers it in `backend.url` (unit-tested; not seen live)
 
 Exit test: fresh VM, install, setup, a spoken reply, restart the app and it remembers you.
 
@@ -34,7 +34,7 @@ Goal: nothing about the first hour feels sketchy.
 
 Goal: shipping a version is boring.
 
-- [ ] CI on GitHub: desktop tests, backend tests, build the sidecar, build the installer, attach it to a tagged release
+- [?] CI on GitHub: `.github/workflows/ci.yml` runs desktop tests, backend tests and builds the installer on main (never run yet). Still open: attach it to a tagged release
 - [ ] CHANGELOG and a version bump rule (version is still 0.1.0 and `private: true`)
 - [ ] Auto-update: the updater today looks in a local folder (`app.updateFolder`); decide on GitHub Releases as the source
 - [ ] Crash and error reporting that stays local unless the user sends it
