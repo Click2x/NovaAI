@@ -1,4 +1,4 @@
-"""python -m novaai [serve|doctor|prerender]"""
+"""python -m novaai [serve|doctor|voicepack|prerender]"""
 from __future__ import annotations
 
 import argparse
@@ -57,6 +57,36 @@ async def prerender() -> int:
     return 0
 
 
+async def voicepack() -> int:
+    from .core import Core
+    from .voicepack import VoicePackError, libraries_present
+
+    core = Core.create()
+    pack = core.voicepack
+    if not libraries_present():
+        print("The speech engines are not installed: pip install -r requirements-voice.txt")
+        return 1
+    if pack.installed():
+        print(f"voice pack is already installed in {pack.dir}")
+        return 0
+    print(f"downloading about {pack.status()['missing_mb']} MB into {pack.dir}")
+    shown = [-1]
+
+    def progress(done: int, total: int) -> None:
+        pct = int(100 * done / total)
+        if pct != shown[0] and pct % 5 == 0:
+            shown[0] = pct
+            print(f"  {pct}%")
+
+    try:
+        await pack.install(progress)
+    except VoicePackError as e:
+        print(f"failed: {e}")
+        return 1
+    print("done")
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(prog="novaai")
     sub = p.add_subparsers(dest="cmd")
@@ -64,10 +94,13 @@ def main() -> int:
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8000)
     sub.add_parser("doctor", help="check Ollama, models and speech")
+    sub.add_parser("voicepack", help="download her voice and hearing (about 500 MB)")
     sub.add_parser("prerender", help="render the setup voice lines to the audio cache")
     args = p.parse_args()
     if args.cmd == "doctor":
         return asyncio.run(doctor())
+    if args.cmd == "voicepack":
+        return asyncio.run(voicepack())
     if args.cmd == "prerender":
         return asyncio.run(prerender())
     serve(getattr(args, "host", "127.0.0.1"), getattr(args, "port", 8000))

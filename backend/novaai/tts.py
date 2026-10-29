@@ -1,5 +1,6 @@
-"""Text to speech with Kokoro (optional dependency). Audio is cached on disk by hash of (voice, speed, text), so scripted onboarding lines are
-synthesized once. When Kokoro is not installed `available()` is False and callers fall back to the system voice (the desktop app's job)."""
+"""Text to speech with Kokoro. Two ways to run it: kokoro-onnx with the model files of the voice pack (no torch; what the installer ships), or the
+`kokoro` package (torch) when that is installed instead. Audio is cached on disk by hash of (voice, speed, text), so scripted onboarding lines are
+synthesized once. When neither works `available()` is False and callers fall back to the system voice (the desktop app's job)."""
 from __future__ import annotations
 
 import hashlib
@@ -32,20 +33,28 @@ def pcm16_to_wav(pcm: bytes, sr: int = SAMPLE_RATE) -> bytes:
 
 
 class TTS:
-    def __init__(self, cache_dir: Path | None = None):
+    def __init__(self, cache_dir: Path | None = None, pack=None):
         self.cache_dir = Path(cache_dir) if cache_dir else None
+        self.pack = pack                    # a voicepack.VoicePack, or None
         self._pipelines: dict = {}
-        self._probe: bool | None = None
+        self._onnx = None
+        self._probe: dict[str, bool] = {}
+
+    def _can_import(self, name: str) -> bool:
+        if name not in self._probe:
+            try:
+                __import__(name)
+                import numpy  # noqa: F401
+                self._probe[name] = True
+            except ImportError:
+                self._probe[name] = False
+        return self._probe[name]
+
+    def _use_onnx(self) -> bool:
+        return bool(self.pack and self.pack.speech_ready() and self._can_import("kokoro_onnx"))
 
     def available(self) -> bool:
-        if self._probe is None:
-            try:
-                import kokoro  # noqa: F401
-                import numpy  # noqa: F401
-                self._probe = True
-            except ImportError:
-                self._probe = False
-        return self._probe
+        return self._use_onnx() or self._can_import("kokoro")
 
     def _pipeline(self, voice: str):
         lang = "b" if voice.startswith("b") else "a"
@@ -71,11 +80,18 @@ class TTS:
             raise TTSUnavailable("Kokoro is not installed")
         import numpy as np
 
-        chunks = []
-        for _g, _p, audio in self._pipeline(voice)(text, voice=voice, speed=speed):
-            a = np.asarray(audio, dtype="float32")
-            chunks.append((np.clip(a, -1, 1) * 32767).astype("<i2").tobytes())
-        pcm = b"".join(chunks)
+        if self._use_onnx():
+            if self._onnx is None:
+                from kokoro_onnx import Kokoro
+                self._onnx = Kokoro(str(self.pack.kokoro_model()), str(self.pack.kokoro_voices()))
+            audio, _sr = self._onnx.create(text, voice=voice, speed=speed, lang="en-gb" if voice.startswith("b") else "en-us")
+            pcm = (np.clip(np.asarray(audio, dtype="float32"), -1, 1) * 32767).astype("<i2").tobytes()
+        else:
+            chunks = []
+            for _g, _p, audio in self._pipeline(voice)(text, voice=voice, speed=speed):
+                a = np.asarray(audio, dtype="float32")
+                chunks.append((np.clip(a, -1, 1) * 32767).astype("<i2").tobytes())
+            pcm = b"".join(chunks)
         if path and pcm:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             path.write_bytes(pcm)

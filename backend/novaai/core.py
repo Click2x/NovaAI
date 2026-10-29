@@ -33,23 +33,28 @@ class Core:
     tools: Toolbox
     tts: Any = None
     stt: Any = None
+    voicepack: Any = None
     _installed: tuple = field(default=(0.0, frozenset()))
 
     @classmethod
-    def create(cls, home: Path | None = None, llm: Any = None, hardware: Hardware | None = None, tts: Any = None, stt: Any = None) -> "Core":
+    def create(cls, home: Path | None = None, llm: Any = None, hardware: Hardware | None = None, tts: Any = None, stt: Any = None, voicepack: Any = None) -> "Core":
         home = Path(home) if home else data_dir()
         home.mkdir(parents=True, exist_ok=True)
         settings = SettingsStore(home / "settings.json")
         memory = Memory(home / "nova.db")
         llm = llm or OllamaClient(lambda: settings.get()["models"]["ollama_url"])
+        if voicepack is None:                  # False turns the pack off (tests, or a machine that supplies its own engines)
+            from .voicepack import VoicePack
+            voicepack = VoicePack(home / "voice")
+        pack = voicepack or None
         if tts is None:
             from .tts import TTS
-            tts = TTS(home / "audio")
+            tts = TTS(home / "audio", pack)
         if stt is None:
             from .stt import STT
-            stt = STT()
+            stt = STT(pack=pack)
         return cls(home=home, settings=settings, llm=llm, memory=memory, hardware=hardware or detect(),
-                   entries=registry.load(home / "models.json"), harm=HarmFilter(lambda: settings.get()["safety"]), tools=Toolbox(memory), tts=tts, stt=stt)
+                   entries=registry.load(home / "models.json"), harm=HarmFilter(lambda: settings.get()["safety"]), tools=Toolbox(memory), tts=tts, stt=stt, voicepack=pack)
 
     def s(self) -> dict:
         return self.settings.get()

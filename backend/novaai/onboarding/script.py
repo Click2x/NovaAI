@@ -30,6 +30,8 @@ L: dict[str, list[list[tuple[str, str]]]] = {
     "install_50": [[("Halfway there.", "happy")], [("That's half done.", "happy")]],
     "install_75": [[("Almost there.", "happy")]],
     "install_done": [[("That's everything. I can feel myself waking up.", "happy")], [("All done. I'm awake.", "happy")]],
+    "install_voice": [[("One more thing to fetch: my voice and my ears. It's a few hundred megabytes.", "neutral")], [("Last download: the files for speaking and listening.", "neutral")]],
+    "install_voice_failed": [[("I couldn't get my voice files. {reason}", "sad"), ("I'll use your computer's voice for now, and we can try again later.", "neutral")]],
     "install_failed": [[("I couldn't get {tag}. {reason}", "sad"), ("I'll try another one that should work just as well.", "neutral")]],
     "install_none": [[("I couldn't download a model that works on this machine. Check your internet connection and that Ollama is running, then we'll try again.", "sad")]],
     "meet_open": [[("Okay, now I can think. Hi.", "happy"), ("First things first: what should I call you?", "curious")]],

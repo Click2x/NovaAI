@@ -293,14 +293,41 @@ class Onboarding:
                 self._narrate("install_failed", tag=cand.tag, reason=str(e)[:120] + ".")
         return None
 
+    def _pack_todo(self):
+        """The voice pack when this backend has the engines for it and the files are not on disk yet, else None."""
+        from ..voicepack import libraries_present
+
+        pack = getattr(self.core, "voicepack", None)
+        return pack if pack and not pack.installed() and libraries_present() else None
+
+    async def _install_voicepack(self, base: float) -> None:
+        """Download her voice and ears. Failing here never fails setup: she speaks with the computer's voice until it is retried."""
+        from ..voicepack import VoicePackError
+
+        st, pack = self.state["install"], self.core.voicepack
+        self._narrate("install_voice")
+
+        def progress(done: int, total: int) -> None:
+            pct = base + (100.0 - base) * (done / total if total else 1.0)
+            st["percent"] = int(min(pct, 99))
+
+        try:
+            await pack.install(progress)
+        except VoicePackError as e:
+            self._narrate("install_voice_failed", reason=str(e)[:120] + ".")
+        except Exception as e:            # a download must never take the whole setup down with it
+            self._narrate("install_voice_failed", reason=f"{type(e).__name__}.")
+
     async def _run_install(self) -> None:
         st = self.state["install"]
         try:
             plan = await self.plan()
             roles = ["voice"] if len(plan["download"]) == 1 else ["voice", "tools"]
             chosen: dict[str, dict] = {}
+            pack = self._pack_todo()
+            share = 85.0 if pack else 100.0          # the models' share of the progress bar; the voice pack gets the rest
             for i, role in enumerate(roles):
-                got = await self._ensure_role(role, 100.0 * i / len(roles), 100.0 / len(roles), (plan.get(role) or {}).get("tag", ""))
+                got = await self._ensure_role(role, share * i / len(roles), share / len(roles), (plan.get(role) or {}).get("tag", ""))
                 if got:
                     chosen[role] = got
                 self._save()
@@ -311,6 +338,8 @@ class Onboarding:
                 if len(roles) == 1 or "tools" not in chosen:      # one model does both jobs: do not let the router go and fetch a second one later
                     self.core.settings.patch({"models": {"tools_override": chosen["voice"]["tag"]}})
                     chosen.setdefault("tools", chosen["voice"])
+                if pack:
+                    await self._install_voicepack(share)
                 st.update(state="done", percent=100, chosen=chosen)
                 self._narrate("install_done")
                 self._save()

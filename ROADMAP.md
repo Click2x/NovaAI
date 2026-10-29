@@ -24,7 +24,7 @@ Exit test: fresh VM, install, setup, a spoken reply, restart the app and it reme
 Goal: nothing about the first hour feels sketchy.
 
 - [ ] Code-sign the installer and `novaai-server.exe` (unsigned means SmartScreen and Defender warnings)
-- [ ] Voice in the bundle: decide between system voice only, an optional "download her voice" step (Kokoro as a separate pack), or a lighter TTS that needs no torch
+- [x] Voice in the bundle: kokoro-onnx and faster-whisper (no torch) are in the sidecar (now 273 MB); setup downloads their models (the voice pack, 502 MB) after the language models and carries on if it fails. Verified with the frozen exe: the pack downloads in 20 s on this connection, she speaks a sentence and Whisper transcribes it back word for word. Not yet through setup in the Electron app
 - [?] Speech-to-text over the desktop WebSocket: utterances are transcribed, wake/stop/sleep words and commands handled (backend/novaai/voicein.py, ws.py; 18 new backend tests). Not heard live. The sidecar leaves out faster-whisper, so the bundled build says it cannot hear until the voice pack decision is made
 - [?] Orb while a real reply is spoken, drag, right-click radial, style switch at runtime
 - [ ] Persona and memory screens (listed as not built in the backend handoff)
@@ -55,7 +55,7 @@ Goal: shipping a version is boring.
 
 ## Open decisions
 
-1. Voice pack: ship system voice and offer Kokoro as a download, or bundle a lighter engine?
+1. ~~Voice pack~~ Decided Oct 29: bundle the torch-free engines, download the model files in setup. Still open: a way to retry the download from the app's settings or tray (the backend endpoints exist).
 2. Ollama: only detect and guide, or offer to install it for the user?
 3. Updates: GitHub Releases, or keep the folder-based updater?
 4. Signing: which certificate, and who holds it?

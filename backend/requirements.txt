@@ -3,3 +3,8 @@ fastapi>=0.104
 uvicorn[standard]>=0.24
 httpx>=0.27
 pydantic>=2.5
+# Her voice (Kokoro on onnxruntime) and ears (Whisper on ctranslate2). Neither needs torch. The engines ship in the installer;
+# their model files (about 500 MB) are the voice pack, downloaded by setup or by `python -m novaai voicepack`.
+kokoro-onnx>=0.4
+faster-whisper>=1.0
+numpy

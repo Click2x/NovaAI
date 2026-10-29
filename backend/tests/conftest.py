@@ -16,7 +16,7 @@ def make_core(tmp_path):
 
     def make(replies=None, installed=(NEMO, QWEN), hardware=None, **llm_kw):
         llm = FakeLLM(replies=replies or ["Okay."], installed=set(installed), **llm_kw)
-        core = Core.create(home=tmp_path / f"home{len(cores)}", llm=llm, hardware=hardware or Hardware("RTX 3090", 24.0, 64.0), tts=_NoTTS(), stt=_NoTTS())
+        core = Core.create(home=tmp_path / f"home{len(cores)}", llm=llm, hardware=hardware or Hardware("RTX 3090", 24.0, 64.0), tts=_NoTTS(), stt=_NoTTS(), voicepack=False)
         cores.append(core)
         return core
 

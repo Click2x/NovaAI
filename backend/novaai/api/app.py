@@ -178,6 +178,43 @@ def create_app(core: Core | None = None) -> FastAPI:
             return JSONResponse({"detail": "speech is not installed", "fallback": "system"}, status_code=503)
         return Response(wav, media_type="audio/wav")
 
+    vp: dict = {"task": None, "percent": 0, "error": ""}
+
+    @app.get("/api/voicepack")
+    async def voicepack_status() -> dict:
+        """Her voice and ears: whether the engines are here, whether the model files are, and how far a running download is."""
+        pack = core.voicepack
+        if not pack:
+            return {"supported": False, "installed": False, "running": False}
+        return {**pack.status(), "running": bool(vp["task"] and not vp["task"].done()), "percent": vp["percent"], "error": vp["error"]}
+
+    @app.post("/api/voicepack/install")
+    async def voicepack_install() -> dict:
+        import asyncio
+
+        from ..voicepack import VoicePackError, libraries_present
+
+        pack = core.voicepack
+        if not pack or not libraries_present():
+            raise HTTPException(409, "this backend has no speech engines to download files for")
+        if vp["task"] and not vp["task"].done():
+            return {"started": False, "running": True}
+
+        def progress(done: int, total: int) -> None:
+            vp["percent"] = int(100 * done / total) if total else 100
+
+        async def run() -> None:
+            vp.update(percent=0, error="")
+            try:
+                await pack.install(progress)
+            except VoicePackError as e:
+                vp["error"] = str(e)[:200]
+            except Exception as e:
+                vp["error"] = f"{type(e).__name__}: {e}"[:200]
+
+        vp["task"] = asyncio.ensure_future(run())
+        return {"started": True, "running": True}
+
     @app.post("/api/stt")
     async def stt(request: Request) -> dict:
         """Body: raw 16 kHz mono 16-bit little-endian PCM. Returns the text."""

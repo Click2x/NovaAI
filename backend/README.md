@@ -7,7 +7,8 @@ The local server behind the Nova.Ai desktop app. It runs on your machine, talks 
 ```
 cd backend
 python -m venv .venv && .venv\Scripts\activate      # source .venv/bin/activate on macOS/Linux
-pip install -r requirements.txt                     # add requirements-voice.txt for her voice and speech recognition
+pip install -r requirements.txt                     # includes her voice and ears (no torch)
+python -m novaai voicepack                          # downloads their model files, about 500 MB (setup does this for you)
 python -m novaai doctor                             # checks Ollama, picks models for this machine, reports what is missing
 python -m novaai serve                              # 127.0.0.1:8000
 ```
@@ -22,6 +23,10 @@ Set `NOVAAI_HOME` to keep the data somewhere else than `~/.novaai`. The server o
 * **tools** does tool calling and structured extraction (profile extraction during onboarding, remember / recall / forget). US models (Llama, gpt-oss, Granite, Phi) and Chinese models (Qwen), each in a regular and an abliterated build.
 
 The router picks by: your override tag, then what fits the GPU (VRAM minus 1.5 GB, or half the RAM with no GPU), then regular vs abliterated, then models already installed, then your origin preference (any / US / CN), then an editorial quality score. Abliterated builds are chosen only when you turned the harm filter off **and** confirmed you are an adult, or when you set `models.variant` yourself. Entries marked `known_good` were seen with tool support on a real install; the others are recommendations that the installer verifies with `ollama show` after pulling, falling back to the next candidate.
+
+## Voice pack
+
+Her voice is Kokoro run by `kokoro-onnx`; her ears are Whisper "base" run by `faster-whisper` (CPU, int8). Neither needs torch, so both libraries ship in the installer. Their model files are the voice pack (`novaai/voicepack.py`, about 500 MB), stored in `~/.novaai/voice`. Setup downloads it after the language models and carries on if that fails (she then uses the computer's voice and the app says it cannot hear yet); `python -m novaai voicepack`, or `POST /api/voicepack/install` with progress on `GET /api/voicepack`, tries again. Downloads resume after an interruption and each file is checked against its exact size. The older torch build of Kokoro (`requirements-voice.txt`) still works when the pack is not installed.
 
 ## Harm filter
 
