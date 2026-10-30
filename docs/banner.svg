@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-labelledby="t d">
+  <title id="t">Nova.Ai</title>
+  <desc id="d">Nova.Ai: a desktop companion that routes models, tools and prompts for you, and remembers what you let it.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="0.6" stop-color="#141a3a"/>
+      <stop offset="1" stop-color="#241446"/>
+    </linearGradient>
+    <radialGradient id="orb" cx="0.38" cy="0.34" r="0.75">
+      <stop offset="0" stop-color="#e9fbff"/>
+      <stop offset="0.35" stop-color="#7fd8ff"/>
+      <stop offset="0.75" stop-color="#7a6bff"/>
+      <stop offset="1" stop-color="#3b2a9c"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7fd8ff" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#7fd8ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#a9b8ff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="320" fill="url(#bg)"/>
+
+  <!-- faint routing lines -->
+  <g fill="none" stroke="#7fd8ff" stroke-opacity="0.16" stroke-width="1.5">
+    <path d="M300 160 C 520 40, 760 40, 1000 90 S 1200 200, 1280 170"/>
+    <path d="M300 160 C 520 280, 760 290, 1000 240 S 1180 120, 1280 130"/>
+    <path d="M300 160 C 560 160, 800 150, 1280 60"/>
+  </g>
+  <g fill="#7fd8ff" fill-opacity="0.5">
+    <circle cx="1000" cy="90" r="4"/><circle cx="1000" cy="240" r="4"/><circle cx="780" cy="52" r="3"/><circle cx="780" cy="282" r="3"/>
+  </g>
+
+  <!-- the orb -->
+  <circle cx="150" cy="160" r="130" fill="url(#halo)"/>
+  <circle cx="150" cy="160" r="78" fill="url(#orb)"/>
+  <ellipse cx="124" cy="132" rx="22" ry="13" fill="#ffffff" fill-opacity="0.55" transform="rotate(-28 124 132)"/>
+
+  <!-- text -->
+  <g font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+    <text x="290" y="150" font-size="84" font-weight="700" fill="url(#title)" letter-spacing="-1">Nova.Ai</text>
+    <text x="294" y="196" font-size="26" fill="#c9d2ff">A desktop companion that sets itself up, picks its own brains,</text>
+    <text x="294" y="228" font-size="26" fill="#c9d2ff">and remembers what you let it, in a place you can read.</text>
+  </g>
+
+  <!-- pillars -->
+  <g font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="17" font-weight="600" fill="#0b1020">
+    <rect x="294" y="256" width="160" height="34" rx="17" fill="#7fd8ff"/>
+    <text x="374" y="278" text-anchor="middle">Model routing</text>
+    <rect x="466" y="256" width="150" height="34" rx="17" fill="#a9b8ff"/>
+    <text x="541" y="278" text-anchor="middle">Tool routing</text>
+    <rect x="628" y="256" width="168" height="34" rx="17" fill="#c9a8ff"/>
+    <text x="712" y="278" text-anchor="middle">Prompt routing</text>
+    <rect x="808" y="256" width="190" height="34" rx="17" fill="#ffffff"/>
+    <text x="903" y="278" text-anchor="middle">Memory you can edit</text>
+  </g>
+</svg>

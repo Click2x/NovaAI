@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/banner.svg" alt="Nova.Ai: model routing, tool routing, prompt routing and memory you can edit" width="100%"></p>
+
 # Nova.Ai
 
 Nova.Ai is a desktop companion: a small glowing orb that lives in the corner of your desktop (or your own VRM avatar), talks and listens, can look at your window when you ask, and sits beside a small chat window. This repository is the desktop app only (Electron, plain JavaScript).
@@ -16,6 +18,19 @@ Nova.Ai is a desktop companion: a small glowing orb that lives in the corner of 
 - Voice in (wake word, push-to-talk style commands) and voice out, speech bubble, history drawer, thumbs and reactions.
 - Notification centre, tray menus, a Home window that hosts the Nova web app, a Code window for the agent, GPU and training status.
 - Settings panel for voice, listening, screen looks, display, chat mode, notifications and the agent.
+
+## What makes it different
+
+Most local AI apps hand you a model picker, a pile of settings and an empty chat box. Nova.Ai is built so a non-technical person never has to set any of that up, and so nothing it knows about you is hidden. Four ideas, with where each one stands today:
+
+| | The idea | Today | Next |
+| --- | --- | --- | --- |
+| **Model routing** | She chooses her own models: one for conversation, one for tool calling, picked for your hardware, with the safety variant that fits your settings. A model that is missing or failing falls through to the next candidate. | Built (`backend/novaai/router.py`, `models.json`). Setup downloads what it picked. | Route by task (a bigger model for hard questions), learn from failures and speed, and show the user which model answered and why. |
+| **Tool routing** | A tools model decides when a request needs a tool, runs it, and the voice model words the result. | Partly built: four tools (remember, recall, forget, the time), triggered by a short list of phrases. | Let the tools model decide instead of phrase matching, add timers, notes and screen looks behind plain-language on/off switches. |
+| **Prompt routing** | Each turn gets the prompt pieces it needs (her personality, boundaries, the memories that matter, the current task) and no more. | One prompt shape for every message. | Choose pieces and context size per kind of turn, and log what was sent. |
+| **Persistent memory you can edit** | What she learns about you is stored as plain sentences on your machine. You can read, correct and delete every one. | The store and an edit/delete API exist (`/api/memory`). Facts are saved during setup and when the tools model calls `remember`. **There is no memory screen in the app yet.** | A memory screen, automatic saving after each turn with a spoken "I'll remember that", summaries of old chats, and a "what she used for this answer" view. |
+
+The rule behind all four: the app picks, the user can look. A "How she thinks" page will show, in plain words, which model answered, which tools ran and which memories were used, so none of the routing is a black box and none of it has to be configured. Two defaults go with it: setup installs [Ollama](https://ollama.com) silently if it is missing and tells you what it is doing as it goes, and everything stays on your machine. Cloud models are an opt-in you switch on in settings, never a default. See [ROADMAP.md](ROADMAP.md) for the order this is being built in.
 
 ## What you need
 

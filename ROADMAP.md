@@ -25,10 +25,22 @@ Goal: nothing about the first hour feels sketchy.
 
 - [ ] Code-sign the installer and `novaai-server.exe` (unsigned means SmartScreen and Defender warnings)
 - [x] Voice in the bundle: kokoro-onnx and faster-whisper (no torch) are in the sidecar (now 273 MB); setup downloads their models (the voice pack, 502 MB) after the language models and carries on if it fails. Verified with the frozen exe: the pack downloads in 20 s on this connection, she speaks a sentence and Whisper transcribes it back word for word. Not yet through setup in the Electron app
-- [?] Speech-to-text over the desktop WebSocket: utterances are transcribed, wake/stop/sleep words and commands handled (backend/novaai/voicein.py, ws.py; 18 new backend tests). Not heard live. The sidecar leaves out faster-whisper, so the bundled build says it cannot hear until the voice pack decision is made
+- [?] Speech-to-text over the desktop WebSocket: utterances are transcribed, wake/stop/sleep words and commands handled (backend/novaai/voicein.py, ws.py; 18 new backend tests). Not heard live. The bundled build hears once the voice pack is on disk
 - [?] Orb while a real reply is spoken, drag, right-click radial, style switch at runtime
-- [ ] Persona and memory screens (listed as not built in the backend handoff)
+- [ ] Persona screen (traits, interests, boundaries, edited in plain words)
+- [ ] Memory screen: list what she knows grouped by kind (identity, preference, boundary, picked up in chat); edit, delete, add, export, clear. The backend already has `/api/memory`; this is app-side work
+- [ ] Automatic memory: after each turn a cheap background pass extracts durable facts and merges duplicates; she says when she saved something; old chats are summarized instead of lost
 - [ ] Uninstall story: what is kept in `~/.novaai` and the app data folder, and a way to delete it
+
+## Phase 2b: The routing and memory story
+
+Goal: the part that makes Nova.Ai different works with no setup by the user, and the user can look at all of it.
+
+- [ ] Tool routing by the tools model instead of the phrase list in `router.route_turn`; more tools (timers and reminders, notes, screen look) behind one permission model with plain on/off switches
+- [ ] Model routing by task, not only by role: a larger model for hard questions when the hardware allows, fallback driven by observed failures and speed
+- [ ] Prompt routing: pick the prompt pieces and context size per kind of turn (chat, tool result, recall-heavy, care) and keep a log of what was sent
+- [ ] "How she thinks" page: which model answered and why, which tools ran, which memories were used, in plain words
+- [ ] Setup installs Ollama for the user instead of requiring it (see open decisions)
 
 ## Phase 3: Release machinery
 
@@ -56,7 +68,8 @@ Goal: shipping a version is boring.
 ## Open decisions
 
 1. ~~Voice pack~~ Decided Oct 29: bundle the torch-free engines, download the model files in setup. Still open: a way to retry the download from the app's settings or tray (the backend endpoints exist).
-2. Ollama: only detect and guide, or offer to install it for the user?
+2. ~~Ollama~~ Decided Oct 29: setup installs it silently, and tells the user in plain words what is happening (what is being downloaded, how big, why, and that it can be removed later). Detecting an existing install comes first, so nobody gets a second copy.
 3. Updates: GitHub Releases, or keep the folder-based updater?
 4. Signing: which certificate, and who holds it?
 5. Roadmap decision 9 ("the app never starts anything on its own") was changed for the bundled backend only; confirm that is the intended boundary.
+6. ~~Cloud models~~ Decided Oct 29: strictly local by default, nothing leaves the machine. Cloud models are an opt-in the user can switch on in settings (their own key, off until they do), and model routing treats them as one more candidate with a plain-language label saying the question leaves the computer.
