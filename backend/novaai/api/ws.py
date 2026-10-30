@@ -6,7 +6,8 @@ client -> server: hello, settings{tts,voice,speed,...}, user_text{turn_id,text},
 server -> client: hello_ack{server,protocol,features,backend_version}, turn_start, sentence{turn_id,sentence_id,text,emotion},
                   transcript{turn_id,purpose,text,keyword,command,ignored,stt_ms,audio_ms} for every utterance (see voicein.py); a command, or her
                   name followed by one, then starts a turn under that turn_id,
-                  turn_end{turn_id,message_id,interrupted,metrics}, history{messages,has_more,before_id}, catchup, pong, error{code,message}
+                  turn_end{turn_id,message_id,interrupted,metrics}, remembered{turn_id,facts:[{id,text,kind}]} when she saved something from what
+                  the user said (learn.py; off with settings memory.auto_learn), history{messages,has_more,before_id}, catchup, pong, error{code,message}
                   and, when speech is on and available, BINARY frames: [u32 LE header_len][JSON header][int16 PCM] per sentence.
 """
 from __future__ import annotations
@@ -23,8 +24,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from .. import PROTOCOL, __version__, voicein
 from ..core import Core
 from ..engine import converse
+from ..learn import learn
 
-FEATURES = ["history", "feedback", "react", "catchup"]
+FEATURES = ["history", "feedback", "react", "catchup", "memory"]
 router = APIRouter()
 
 
@@ -59,6 +61,8 @@ class Conn:
     stt_warned: bool = False
     stt_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     utterances: set = field(default_factory=set)      # running utterance tasks, so none is garbage-collected mid-flight
+    learner: asyncio.Task | None = None               # background "what is worth remembering" pass (learn.py); dropped when a new turn starts
+    unlearned: list = field(default_factory=list)     # user messages not yet looked at, so a cancelled pass loses nothing
 
     async def send(self, type_: str, **fields: Any) -> None:
         await self.ws.send_text(json.dumps({"v": PROTOCOL, "type": type_, **fields}))
@@ -106,8 +110,31 @@ class Conn:
                 await self.send("turn_end", turn_id=turn_id, message_id=mid, interrupted=interrupted, metrics={"total_ms": int((time.monotonic() - t0) * 1000), "blocked": blocked})
             except Exception:
                 pass
+            if said and not blocked and not interrupted:
+                self.unlearned = (self.unlearned + [text])[-6:]
+                self.learner = asyncio.create_task(self.run_learn(turn_id))
+
+    async def run_learn(self, turn_id: str) -> None:
+        """After a turn: save lasting facts from what the user said, then tell the app so it can say "I'll remember that"."""
+        texts = list(self.unlearned)
+        saved = await learn(self.core, "\n".join(texts))
+        self.unlearned = self.unlearned[len(texts):]
+        if saved:
+            try:
+                await self.send("remembered", turn_id=turn_id, facts=saved)
+            except Exception:
+                pass
+
+    async def cancel_learning(self) -> None:
+        if self.learner and not self.learner.done():
+            self.learner.cancel()
+            try:
+                await self.learner
+            except (asyncio.CancelledError, Exception):
+                pass
 
     async def start_turn(self, turn_id: str, text: str) -> None:
+        await self.cancel_learning()          # a new message comes first; the model is needed for her answer
         await self.cancel()
         self.turn_id = turn_id
         self.task = asyncio.create_task(self.run_turn(turn_id, text))
@@ -231,4 +258,5 @@ async def desktop_ws(ws: WebSocket) -> None:
     finally:
         for t in list(conn.utterances):
             t.cancel()
+        await conn.cancel_learning()
         await conn.cancel()

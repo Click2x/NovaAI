@@ -201,6 +201,7 @@ registerTraySection(SECTION.NOVA, (ctx) => [
 ])
 registerTraySection(SECTION.NOVA + 1, () => [
   { label: 'Open Nova Home (Ctrl+Alt+H)', click: () => openHome() },
+  { label: 'What Nova remembers...', click: () => memoryWindow.open() },
   { label: 'Set up Nova...', click: () => setupWindow.open() },
   { label: 'Settings...', click: openSettingsWindow },
   { label: 'Start with Windows', type: 'checkbox', checked: eff().app.autostart, click: (i) => updateSettings({ app: { autostart: i.checked } }) },
@@ -337,6 +338,14 @@ const codeWindow = require('./code').registerCode({
   preload: path.join(__dirname, 'code-preload.js'),
 })
 const openCodeWindow = () => codeWindow.open()
+
+// What she remembers (electron/memory.js; the page is src/memory/): read, edit, delete, export. Opened from the tray.
+const memoryWindow = require('./memory').registerMemory({
+  ipcMain, BrowserWindow, dialog, screen, DEV,
+  getBase: () => settingsLib.backendHttpUrl(eff(), process.env),
+  distDir: path.join(__dirname, '..', 'dist'),
+  preload: path.join(__dirname, 'memory-preload.js'),
+})
 
 // Guided setup (electron/onboarding.js; the page is src/onboarding/). Opens by itself on a first run, from the tray any time.
 const setupWindow = require('./onboarding').registerOnboarding({

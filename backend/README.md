@@ -24,6 +24,12 @@ Set `NOVAAI_HOME` to keep the data somewhere else than `~/.novaai`. The server o
 
 The router picks by: your override tag, then what fits the GPU (VRAM minus 1.5 GB, or half the RAM with no GPU), then regular vs abliterated, then models already installed, then your origin preference (any / US / CN), then an editorial quality score. Abliterated builds are chosen only when you turned the harm filter off **and** confirmed you are an adult, or when you set `models.variant` yourself. Entries marked `known_good` were seen with tool support on a real install; the others are recommendations that the installer verifies with `ollama show` after pulling, falling back to the next candidate.
 
+## Memory
+
+Everything she knows about the user is a plain sentence in `nova.db` (table `facts`), each marked with who wrote it (`user`, `onboarding`, `tool`, `learned`) and a kind (`identity`, `preference`, `boundary`, `plan`, `fact`). `GET/POST/PATCH/DELETE /api/memory` read and change it; the desktop app's "What Nova remembers" window uses exactly these.
+
+After each turn `novaai/learn.py` reads only what the USER said, never her reply, and saves lasting facts: it skips small talk with a cheap pattern test, messages the harm filter flags, and near-duplicates of what she already knows. It asks the voice model first (already loaded) and falls back to the tools model. New facts are announced to the app with a `remembered` WebSocket message. Turn it off with `{"memory": {"auto_learn": false}}` in settings; she then remembers only what the user asks her to.
+
 ## Voice pack
 
 Her voice is Kokoro run by `kokoro-onnx`; her ears are Whisper "base" run by `faster-whisper` (CPU, int8). Neither needs torch, so both libraries ship in the installer. Their model files are the voice pack (`novaai/voicepack.py`, about 500 MB), stored in `~/.novaai/voice`. Setup downloads it after the language models and carries on if that fails (she then uses the computer's voice and the app says it cannot hear yet); `python -m novaai voicepack`, or `POST /api/voicepack/install` with progress on `GET /api/voicepack`, tries again. Downloads resume after an interruption and each file is checked against its exact size. The older torch build of Kokoro (`requirements-voice.txt`) still works when the pack is not installed.

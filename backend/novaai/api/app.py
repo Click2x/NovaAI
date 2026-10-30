@@ -39,6 +39,7 @@ class AvatarPick(BaseModel):
 
 class FactIn(BaseModel):
     text: str = Field(max_length=400)
+    kind: str | None = Field(default=None, max_length=20)
 
 
 def create_app(core: Core | None = None) -> FastAPI:
@@ -140,14 +141,14 @@ def create_app(core: Core | None = None) -> FastAPI:
 
     @app.post("/api/memory")
     async def memory_add(body: FactIn) -> dict:
-        fid = core.memory.add_fact(body.text, source="user")
+        fid = core.memory.add_fact(body.text, kind=body.kind or "fact", source="user")
         if not fid:
             raise HTTPException(422, "text is too short")
         return {"id": fid}
 
     @app.patch("/api/memory/{fact_id}")
     async def memory_update(fact_id: int, body: FactIn) -> dict:
-        if not core.memory.update_fact(fact_id, body.text):
+        if not core.memory.update_fact(fact_id, body.text, body.kind):
             raise HTTPException(404, "no such memory, or text too short")
         return {"ok": True}
 

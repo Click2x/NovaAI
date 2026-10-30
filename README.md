@@ -2,7 +2,7 @@
 
 # Nova.Ai
 
-Nova.Ai is a desktop companion: a small glowing orb that lives in the corner of your desktop (or your own VRM avatar), talks and listens, can look at your window when you ask, and sits beside a small chat window. This repository is the desktop app only (Electron, plain JavaScript).
+Nova.Ai is a desktop companion: a small glowing orb that lives in the corner of your desktop (or your own VRM avatar), talks and listens, can look at your window when you ask, and sits beside a small chat window. This repository holds the whole thing: the desktop app (Electron, plain JavaScript) and its backend (Python, in [`backend/`](backend/README.md)). Where it is and where it is going: [ROADMAP.md](ROADMAP.md#timeline).
 
 ![The guided, voiced setup](docs/screenshots/setup.png)
 
@@ -28,13 +28,13 @@ Most local AI apps hand you a model picker, a pile of settings and an empty chat
 | **Model routing** | She chooses her own models: one for conversation, one for tool calling, picked for your hardware, with the safety variant that fits your settings. A model that is missing or failing falls through to the next candidate. | Built (`backend/novaai/router.py`, `models.json`). Setup downloads what it picked. | Route by task (a bigger model for hard questions), learn from failures and speed, and show the user which model answered and why. |
 | **Tool routing** | A tools model decides when a request needs a tool, runs it, and the voice model words the result. | Partly built: four tools (remember, recall, forget, the time), triggered by a short list of phrases. | Let the tools model decide instead of phrase matching, add timers, notes and screen looks behind plain-language on/off switches. |
 | **Prompt routing** | Each turn gets the prompt pieces it needs (her personality, boundaries, the memories that matter, the current task) and no more. | One prompt shape for every message. | Choose pieces and context size per kind of turn, and log what was sent. |
-| **Persistent memory you can edit** | What she learns about you is stored as plain sentences on your machine. You can read, correct and delete every one. | The store and an edit/delete API exist (`/api/memory`). Facts are saved during setup and when the tools model calls `remember`. **There is no memory screen in the app yet.** | A memory screen, automatic saving after each turn with a spoken "I'll remember that", summaries of old chats, and a "what she used for this answer" view. |
+| **Persistent memory you can edit** | What she learns about you is stored as plain sentences on your machine. You can read, correct and delete every one. | Built: facts are saved during setup, when you ask her to remember, and automatically after a turn (`learn.py`, with an off switch). A tray window, "What Nova remembers", lets you search, add, edit, delete (with undo), export and forget everything. Not yet tried with a real model or from the packaged app. | Summaries of old chats, and a "what she used for this answer" view. |
 
 The rule behind all four: the app picks, the user can look. A "How she thinks" page will show, in plain words, which model answered, which tools ran and which memories were used, so none of the routing is a black box and none of it has to be configured. Two defaults go with it: setup installs [Ollama](https://ollama.com) silently if it is missing and tells you what it is doing as it goes, and everything stays on your machine. Cloud models are an opt-in you switch on in settings, never a default. See [ROADMAP.md](ROADMAP.md) for the order this is being built in.
 
 ## What you need
 
-Nova.Ai is a client. It talks to a backend over a local WebSocket (`ws://127.0.0.1:8000`, protocol v1: `/api/desktop/ws`). The backend lives in [`backend/`](backend/README.md) in this repository: a small Python server that uses [Ollama](https://ollama.com) for models, with Mistral NeMo as her voice, a model router for tool calling, a harm filter you can turn off, and a guided, voiced onboarding. The installer carries a frozen copy of it (`novaai-server.exe`, built by `npm run build:backend`), which the app starts on its own at launch when nothing answers at the backend address and stops when it quits; its log is `logs/backend.log` in the app's data folder. Her voice (Kokoro on onnxruntime) and ears (Whisper on ctranslate2) are bundled too and need no torch; their model files (about 500 MB, the voice pack) are downloaded once during setup into `~/.novaai/voice`, and if that download fails she uses your computer's voice until you retry it (`novaai-server voicepack`, or `python -m novaai voicepack` from source). You still need [Ollama](https://ollama.com) for the models. From source, start it with `python -m novaai serve`; a backend you start yourself (or a start script) is never replaced by the bundled one.
+The desktop app is a client of the backend in this repository. It talks to it over a local WebSocket (`ws://127.0.0.1:8000`, protocol v1: `/api/desktop/ws`). The backend lives in [`backend/`](backend/README.md) in this repository: a small Python server that uses [Ollama](https://ollama.com) for models, with Mistral NeMo as her voice, a model router for tool calling, a harm filter you can turn off, and a guided, voiced onboarding. The installer carries a frozen copy of it (`novaai-server.exe`, built by `npm run build:backend`), which the app starts on its own at launch when nothing answers at the backend address and stops when it quits; its log is `logs/backend.log` in the app's data folder. Her voice (Kokoro on onnxruntime) and ears (Whisper on ctranslate2) are bundled too and need no torch; their model files (about 500 MB, the voice pack) are downloaded once during setup into `~/.novaai/voice`, and if that download fails she uses your computer's voice until you retry it (`novaai-server voicepack`, or `python -m novaai voicepack` from source). You still need [Ollama](https://ollama.com) for the models. From source, start it with `python -m novaai serve`; a backend you start yourself (or a start script) is never replaced by the bundled one.
 
 ## First run
 
@@ -46,8 +46,10 @@ On a fresh install the app opens a guided, voiced setup (`Set up Nova...` in the
 npm install
 npm start          # builds with Vite, then launches Electron
 npm test           # pure node tests, no Electron or backend needed
-npm run dist       # Windows installer (electron-builder)
+npm run dist       # Windows installer (electron-builder); builds the backend sidecar first
 ```
+
+Backend tests (from `backend/`, with its own Python environment): `python -m pytest`. See [backend/README.md](backend/README.md).
 
 Settings live in `settings.json` under the Electron user-data folder; environment variables such as `NOVA_BACKEND`, `NOVA_TTS` and `NOVA_VOICE_IN` override them (see `electron/settings.js`).
 
@@ -61,4 +63,4 @@ GPL-3.0-only, see `LICENSE`. No avatar model is distributed with this repository
 
 ## History
 
-This repository was split from the private Nova project with its commit history kept (`git subtree split` of `desktop/`).
+The desktop app was split from the private Nova project with its commit history kept (`git subtree split` of `desktop/`); the backend was added to this repository on Oct 27, 2026.

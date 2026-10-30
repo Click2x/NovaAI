@@ -1,6 +1,28 @@
 # Nova.Ai roadmap
 
-Where we are (Oct 29, 2026): the desktop app, the guided voiced setup and the backend are built, tested (345 desktop tests, 79 backend) and pushed. The backend now ships inside the installer as a sidecar. What stands between this and a public release is proof that a stranger can install it and have it work.
+## Timeline
+
+Dates come from the git history. Testing on real machines has been deferred on purpose, so "built" below means written and unit-tested, not yet watched live unless it says so.
+
+**Done**
+
+| When | Milestone |
+| --- | --- |
+| Oct 18-19 | Electron desktop app: transparent overlay, WebSocket chat, speech bubble, voice in and out, screen awareness, settings panel, Home window, notification centre, GPU arbiter, training review (phases 1-12 and 16 of the original plan) |
+| Oct 25-26 | Code window and agent hooks (phases 13-15); optional avatar display, radial menu, chat window placed from one origin |
+| Oct 27 | Split into this standalone public repo as Nova.Ai; the backend added to it (model router, harm filter, voiced onboarding); guided voiced setup; the orb replaces the avatar (no avatar model ships); movable, lockable layout |
+| Oct 29 | Backend bundled as a PyInstaller sidecar the app starts and stops; installer built; failed-backend explanation and busy-port fallback; CI workflow written; speech to text over the WebSocket; torch-free voice pack (Kokoro and Whisper, 502 MB, downloaded in setup); README vision and banner |
+| Oct 29-30 | **Memory:** automatic fact learning after each turn (`learn.py`, off switch `memory.auto_learn`), a "remembered" message to the app, and the "What Nova remembers" window (search, add, edit, delete with undo, export, forget everything) |
+
+**We are here (Oct 30, 2026).** The desktop app and the backend live in one repository and both build. Desktop 359 tests and backend 115 tests pass. The newest piece, memory, has been exercised against a real backend in a browser (edit, delete, undo, search, the learning switch) but not yet through the Electron tray or with a real model extracting facts. Still unproven on a real machine: the rebuilt installer with the 273 MB sidecar, a clean-machine install, setup end to end, a real microphone, CI on GitHub, and code signing.
+
+**Way forward**
+
+1. **Make the differentiator real:** tool routing by the tools model (replacing the phrase list), more tools behind plain on/off switches, model routing by task, prompt routing, and the "How she thinks" page (Phase 2b).
+2. **Zero setup for non-technical users:** setup installs Ollama silently and narrates it; a retry button for a failed voice-pack download.
+3. **Prove it:** one testing pass: rebuild the installer, clean-machine install, setup end to end, microphone, CI on GitHub.
+4. **Trust and release machinery:** code signing, CHANGELOG and version policy, auto-update from GitHub Releases, uninstall story (Phases 2-3).
+5. **Public launch:** tagged release, install guide, issue templates (Phase 4).
 
 Status marks: `[x]` done, `[ ]` open, `[?]` built but never verified live.
 
@@ -28,8 +50,8 @@ Goal: nothing about the first hour feels sketchy.
 - [?] Speech-to-text over the desktop WebSocket: utterances are transcribed, wake/stop/sleep words and commands handled (backend/novaai/voicein.py, ws.py; 18 new backend tests). Not heard live. The bundled build hears once the voice pack is on disk
 - [?] Orb while a real reply is spoken, drag, right-click radial, style switch at runtime
 - [ ] Persona screen (traits, interests, boundaries, edited in plain words)
-- [ ] Memory screen: list what she knows grouped by kind (identity, preference, boundary, picked up in chat); edit, delete, add, export, clear. The backend already has `/api/memory`; this is app-side work
-- [ ] Automatic memory: after each turn a cheap background pass extracts durable facts and merges duplicates; she says when she saved something; old chats are summarized instead of lost
+- [?] Memory screen: tray > "What Nova remembers..." lists what she knows grouped by kind; search, add, edit, delete with undo, export as text, forget everything, and the learning on/off switch. Exercised against a real backend in a browser; not yet opened from the tray in Electron
+- [?] Automatic memory: after each turn `learn.py` reads what the user said (never her reply), saves lasting facts as plain sentences, skips near-duplicates and flagged messages, and the app says "I will remember that". Unit-tested with a fake model; not yet run with a real one. Still open: summarize old chats instead of losing them
 - [ ] Uninstall story: what is kept in `~/.novaai` and the app data folder, and a way to delete it
 
 ## Phase 2b: The routing and memory story

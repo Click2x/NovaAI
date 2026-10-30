@@ -182,6 +182,13 @@ async function boot() {
   events.on('feedback_ack', (m) => { actions.ack(m); drawer.ack(m); smokeLog(`feedback_ack ${m.message_id} ${m.rating}`) })
   events.on('react_ack', (m) => { actions.reacted(m); drawer.reacted(m); smokeLog(`react_ack ${m.message_id} ${(m.reactions || []).join('')}`) })
   events.on('transcript', (m) => onTranscript(m))
+  // She saved something from what the user said (backend learn.py): say so, quietly, and point at where it can be changed.
+  events.on('remembered', (m) => {
+    const facts = (Array.isArray(m.facts) ? m.facts : []).map((f) => String(f && f.text || '').replace(/^the user\b/i, 'You').slice(0, 200)).filter(Boolean)
+    if (!facts.length) return
+    notifier.add({ id: 'mem-' + (m.turn_id || Date.now().toString(36)), kind: 'message', title: 'I will remember that', body: facts.join('\n') + '\n(Tray > What Nova remembers: change or delete anything.)', actions: [], local: true }, { pop: popAllowed() })
+    smokeLog(`remembered ${facts.length}`)
+  })
   events.on('tool', (m) => {
     chips.tool(m)
     smokeLog(`chip ${m.name} ${chips.labels().join('|')}`)

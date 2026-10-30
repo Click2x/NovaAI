@@ -51,12 +51,15 @@ class Memory:
         with self._lock:
             return [dict(r) for r in self._db.execute("SELECT * FROM facts ORDER BY updated DESC LIMIT ?", (limit,))]
 
-    def update_fact(self, fact_id: int, text: str) -> bool:
+    def update_fact(self, fact_id: int, text: str, kind: str | None = None) -> bool:
         text = re.sub(r"\s+", " ", text or "").strip()[:MAX_FACT]
         if len(text) < 3:
             return False
         with self._lock:
-            cur = self._db.execute("UPDATE facts SET text=?, updated=? WHERE id=?", (text, time.time(), fact_id))
+            if kind:
+                cur = self._db.execute("UPDATE facts SET text=?, kind=?, updated=? WHERE id=?", (text, kind[:20], time.time(), fact_id))
+            else:
+                cur = self._db.execute("UPDATE facts SET text=?, updated=? WHERE id=?", (text, time.time(), fact_id))
             self._db.commit()
             return cur.rowcount > 0
 
@@ -86,6 +89,30 @@ class Memory:
         hits = [t for t in scored if t[0] > 0]
         hits.sort(key=lambda t: (t[0], t[1]), reverse=True)
         return [t[2] for t in hits[:k]]
+
+    def similar_fact(self, text: str, threshold: float = 0.75) -> dict | None:
+        """An existing fact that says nearly the same thing (word overlap of at least `threshold`), so a restated fact is not saved twice."""
+        want = _words(text)
+        if not want:
+            return None
+        with self._lock:
+            rows = [dict(r) for r in self._db.execute("SELECT * FROM facts")]
+        best, best_score = None, 0.0
+        for r in rows:
+            have = _words(r["text"])
+            if not have:
+                continue
+            score = len(want & have) / len(want | have)
+            if score >= threshold and score > best_score:
+                best, best_score = r, score
+        return best
+
+    def touch_similar(self, text: str) -> None:
+        hit = self.similar_fact(text)
+        if hit:
+            with self._lock:
+                self._db.execute("UPDATE facts SET updated=? WHERE id=?", (time.time(), hit["id"]))
+                self._db.commit()
 
     def clear_facts(self) -> int:
         with self._lock:

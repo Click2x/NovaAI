@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Nova - What I remember</title>
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data:" />
+    <link rel="stylesheet" href="/src/memory/memory.css" />
+  </head>
+  <body>
+    <header>
+      <h1>What I remember</h1>
+      <p id="headline" aria-live="polite"></p>
+      <p class="hint">Everything here is stored on this computer. Change it, delete it, or add to it: I will use exactly what you see.</p>
+    </header>
+    <main>
+      <div id="notice" role="status" hidden></div>
+      <div class="bar">
+        <input id="search" type="search" placeholder="Search what I remember" aria-label="Search what I remember" autocomplete="off" />
+        <label class="toggle" title="When on, I save lasting things you tell me, and say so each time.">
+          <input id="learn" type="checkbox" /> Learn from our chats
+        </label>
+      </div>
+      <form id="add" autocomplete="off">
+        <input id="add-text" type="text" maxlength="400" placeholder="Tell me something to remember" aria-label="Something to remember" />
+        <select id="add-kind" aria-label="What kind of thing is it"></select>
+        <button class="btn primary" type="submit">Remember</button>
+      </form>
+      <section id="list" aria-label="Remembered things"></section>
+    </main>
+    <footer>
+      <button id="export" class="btn quiet">Export as text</button>
+      <button id="clear" class="btn danger">Forget everything</button>
+    </footer>
+    <script type="module" src="/src/memory/memory.js"></script>
+  </body>
+</html>

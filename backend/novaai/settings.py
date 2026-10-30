@@ -31,6 +31,7 @@ DEFAULTS: dict[str, Any] = {
             "dangerous_instructions": "block",
         },
     },
+    "memory": {"auto_learn": True},     # after a turn she saves lasting facts the user told her (learn.py); off = only what the user asks her to remember
     "onboarding": {"done": False},
 }
 
@@ -64,7 +65,7 @@ def sanitize(raw: Any, base: dict[str, Any] | None = None) -> dict[str, Any]:
     b = base or DEFAULTS
     src = raw if isinstance(raw, dict) else {}
     g = lambda section: src.get(section) if isinstance(src.get(section), dict) else {}
-    user, nova, persona, models, safety, onb = g("user"), g("nova"), g("persona"), g("models"), g("safety"), g("onboarding")
+    user, nova, persona, models, safety, onb, mem = g("user"), g("nova"), g("persona"), g("models"), g("safety"), g("onboarding"), g("memory")
     cats_in = safety.get("categories") if isinstance(safety.get("categories"), dict) else {}
     cats = {k: (cats_in.get(k) if cats_in.get(k) in SAFETY_ACTIONS else v) for k, v in b["safety"]["categories"].items()}
     speed = nova.get("speed")
@@ -98,6 +99,7 @@ def sanitize(raw: Any, base: dict[str, Any] | None = None) -> dict[str, Any]:
             "adult_confirmed": safety["adult_confirmed"] if isinstance(safety.get("adult_confirmed"), bool) else b["safety"]["adult_confirmed"],
             "categories": cats,
         },
+        "memory": {"auto_learn": mem["auto_learn"] if isinstance(mem.get("auto_learn"), bool) else b["memory"]["auto_learn"]},
         "onboarding": {"done": onb["done"] if isinstance(onb.get("done"), bool) else b["onboarding"]["done"]},
     }
 
