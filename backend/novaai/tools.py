@@ -31,7 +31,12 @@ class Toolbox:
                 return "Saved." if fid else "Nothing to save."
             if name == "recall":
                 hits = self.memory.search_facts(str(args.get("topic", "")))
-                return "\n".join("- " + h["text"] for h in hits) if hits else "Nothing remembered about that."
+                if hits:
+                    return "\n".join("- " + h["text"] for h in hits)
+                recent = self.memory.list_facts(8)        # no word matched ("my food" never says "food"): offer what is there and let her judge
+                if not recent:
+                    return "Nothing remembered yet."
+                return "Nothing matched those words exactly. Everything remembered, newest first:\n" + "\n".join("- " + h["text"] for h in recent)
             if name == "forget":
                 n = self.memory.forget_matching(str(args.get("topic", "")))
                 return f"Forgot {n} item{'s' if n != 1 else ''}." if n else "Nothing matched."

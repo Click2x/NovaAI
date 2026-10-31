@@ -24,6 +24,12 @@ Set `NOVAAI_HOME` to keep the data somewhere else than `~/.novaai`. The server o
 
 The router picks by: your override tag, then what fits the GPU (VRAM minus 1.5 GB, or half the RAM with no GPU), then regular vs abliterated, then models already installed, then your origin preference (any / US / CN), then an editorial quality score. Abliterated builds are chosen only when you turned the harm filter off **and** confirmed you are an adult, or when you set `models.variant` yourself. Entries marked `known_good` were seen with tool support on a real install; the others are recommendations that the installer verifies with `ollama show` after pulling, falling back to the next candidate.
 
+## Tool routing
+
+Every Ollama call asks for an 8192-token context (`llm.DEFAULT_NUM_CTX`). Without it Ollama loads Mistral NeMo at its own 131072-token default: a 29 GB load that spills onto the CPU and takes seconds per message.
+
+Before each reply `engine.route_message` asks a model one question and gets a constrained JSON answer (`{"tool": "remember"}`, or `"none"`): which tool, if any, the message needs. Words like *remember* or *forget* in ordinary talk ("I forgot my keys") are meant to come back `none`. The tools phase then runs with only the chosen tool and the voice model words the result. The voice model asks first when it can do tools too (it is already loaded, so there is no model swap; Mistral NeMo scored 94% against 97% for a dedicated tools model on the four built tools), then the tools model. If no model can answer, the old phrase list (`router.route_turn`) takes over so the obvious requests still work. `novaai/decide.py` holds the `Decider` interface and the catalog (the four built tools plus planned ones); `python tools/eval-routing.py --decider json --model <tag>` (from the repo root, with the backend's Python) scores a model on `tests/routing_cases.json`.
+
 ## Memory
 
 Everything she knows about the user is a plain sentence in `nova.db` (table `facts`), each marked with who wrote it (`user`, `onboarding`, `tool`, `learned`) and a kind (`identity`, `preference`, `boundary`, `plan`, `fact`). `GET/POST/PATCH/DELETE /api/memory` read and change it; the desktop app's "What Nova remembers" window uses exactly these.

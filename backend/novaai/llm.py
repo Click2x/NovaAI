@@ -15,6 +15,9 @@ from typing import Any, AsyncIterator, Callable, Optional
 import httpx
 
 
+DEFAULT_NUM_CTX = 8192          # what models.json sizes its vram_gb estimates for
+
+
 class LLMError(RuntimeError):
     pass
 
@@ -66,12 +69,15 @@ class OllamaClient:
         except httpx.HTTPError as e:
             raise LLMError(f"pull {tag}: {e}") from e
 
-    def _body(self, model: str, messages: list, tools, options, think, stream: bool, keep_alive: str | None) -> dict:
+    def _body(self, model: str, messages: list, tools, options, think, stream: bool, keep_alive: str | None, fmt=None) -> dict:
         body: dict[str, Any] = {"model": model, "messages": messages, "stream": stream}
+        if fmt:
+            body["format"] = fmt          # a JSON schema: the reply is constrained to match it
         if tools:
             body["tools"] = tools
-        if options:
-            body["options"] = options
+        # Without num_ctx Ollama loads a model at its own default, which for some (Mistral NeMo: 131072 tokens) is a 29 GB load that spills onto the
+        # CPU and takes seconds per message. Every call asks for the same size, so a model is not reloaded when the next call differs.
+        body["options"] = {"num_ctx": DEFAULT_NUM_CTX, **(options or {})}
         if think is not None:
             body["think"] = think
         if keep_alive:
@@ -79,11 +85,11 @@ class OllamaClient:
         return body
 
     async def chat(self, model: str, messages: list, tools: list | None = None, options: dict | None = None, think: bool | None = None,
-                   keep_alive: str | None = "30m") -> AsyncIterator[dict]:
+                   keep_alive: str | None = "30m", fmt=None) -> AsyncIterator[dict]:
         for attempt in (0, 1):
             try:
                 async with self._client() as c:
-                    async with c.stream("POST", "/api/chat", json=self._body(model, messages, tools, options, think, True, keep_alive)) as r:
+                    async with c.stream("POST", "/api/chat", json=self._body(model, messages, tools, options, think, True, keep_alive, fmt)) as r:
                         if r.status_code != 200:
                             detail = (await r.aread())[:300].decode("utf-8", "replace")
                             if attempt == 0 and think is not None and r.status_code == 400 and "think" in detail.lower():
@@ -105,9 +111,9 @@ class OllamaClient:
         except LLMError:
             pass
 
-    async def complete(self, model: str, messages: list, tools: list | None = None, options: dict | None = None, think: bool | None = None) -> dict:
+    async def complete(self, model: str, messages: list, tools: list | None = None, options: dict | None = None, think: bool | None = None, fmt=None) -> dict:
         text, calls = [], []
-        async for chunk in self.chat(model, messages, tools, options, think):
+        async for chunk in self.chat(model, messages, tools, options, think, fmt=fmt):
             m = chunk.get("message") or {}
             if m.get("content"):
                 text.append(m["content"])
@@ -158,8 +164,8 @@ class FakeLLM:
         self.installed.add(tag)
         yield {"status": "success"}
 
-    def _next(self, model, messages, tools):
-        self.calls.append({"model": model, "messages": messages, "tools": tools})
+    def _next(self, model, messages, tools, fmt=None):
+        self.calls.append({"model": model, "messages": messages, "tools": tools, "format": fmt})
         if model in self.fail_models:
             raise LLMError(f"{model}: unavailable")
         r = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
@@ -167,15 +173,15 @@ class FakeLLM:
             r = r(model, messages, tools)
         return {"role": "assistant", "content": r} if isinstance(r, str) else dict(r)
 
-    async def chat(self, model: str, messages: list, tools=None, options=None, think=None, keep_alive=None) -> AsyncIterator[dict]:
-        msg = self._next(model, messages, tools)
+    async def chat(self, model: str, messages: list, tools=None, options=None, think=None, keep_alive=None, fmt=None) -> AsyncIterator[dict]:
+        msg = self._next(model, messages, tools, fmt)
         text = msg.get("content", "")
         for i in range(0, len(text), 12):
             yield {"message": {"role": "assistant", "content": text[i:i + 12]}, "done": False}
         yield {"message": {"role": "assistant", "content": "", **({"tool_calls": msg["tool_calls"]} if msg.get("tool_calls") else {})}, "done": True}
 
-    async def complete(self, model: str, messages: list, tools=None, options=None, think=None) -> dict:
-        return self._next(model, messages, tools)
+    async def complete(self, model: str, messages: list, tools=None, options=None, think=None, fmt=None) -> dict:
+        return self._next(model, messages, tools, fmt)
 
     async def unload(self, model: str) -> None:
         return None
